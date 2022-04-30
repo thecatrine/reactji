@@ -59,11 +59,6 @@ def batch_generator(batch_size, max_timesteps=150):
     except StopIteration as e:
         pass
 
-
-gen = batch_generator(batch_size=10)
-
-steps, inputs, outputs = next(gen)
-
 def render_batch(batch_in, batch_out):
     grid_in = torchvision.utils.make_grid(batch_in)
     grid_out = torchvision.utils.make_grid(batch_out)
@@ -87,12 +82,11 @@ if args.resume:
     print("Resuming from {}".format(args.resume))
     model.load_state_dict(torch.load(args.resume))
 model.to(device)
-#model.to(device)
 
 loss_fn = torch.nn.MSELoss()
 
 # optimizer
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 BATCH_SIZE = 128
 
@@ -142,7 +136,7 @@ for epoch in range(EPOCHS):
         vdata = next(validation)
         s, vinputs, vlabels = vdata
         s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
-        voutputs = model(s, inputs)
+        voutputs = model(s, vinputs)
         vloss = loss_fn(voutputs, vlabels)
         running_vloss += vloss.item()
     
