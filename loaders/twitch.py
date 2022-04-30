@@ -20,13 +20,17 @@ def get_from_zip():
         namelist = zip.namelist()
         random.shuffle(namelist)
         for filename in namelist:
-            print("opening file: " + filename)
+            #print("opening file: " + filename)
             image_data = zip.read(filename)
 
-            image = Image.open(io.BytesIO(image_data))
-            yield image_to_tensor(image.convert("RGB"))
+            try:
+                image = Image.open(io.BytesIO(image_data))
+                yield image_to_tensor(image.convert("RGB"))
+            except:
+                print("Error loading image: " + filename)
+                continue
 
-def noise_img(img, n=1, alpha=0.9985):                    
+def noise_img(img, n=1, alpha=0.95):                    
     return torch.normal(np.sqrt(alpha**n)*img, (1-alpha**n))
 
 SCALE = 10
@@ -34,11 +38,12 @@ SCALE = 10
 def image_to_tensor(im):
     tensor = torchvision.transforms.ToTensor()(im)
 
-    scaled_tensor = ((tensor - 128) / 256) * SCALE
+    scaled_tensor = (tensor - 0.5) * SCALE
     return scaled_tensor
 
 def tensor_to_image(tensor):
-    tensor = (tensor * 256 / SCALE) + 128
+    tensor = (tensor / SCALE) + 0.5
+    tensor = torch.clip(input=tensor, min=0, max=1)
 
     image = torchvision.transforms.ToPILImage()(tensor)
     return image
