@@ -5,6 +5,8 @@ import random
 import torch
 import torchvision
 
+from torch.utils.tensorboard import SummaryWriter
+
 import matplotlib.pyplot as plt
 
 
@@ -90,6 +92,8 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 BATCH_SIZE = 128
 
+writer = SummaryWriter()
+
 def train_one_epoch(epoch_index):
     running_loss = 0.
     last_loss = 0.
@@ -112,8 +116,12 @@ def train_one_epoch(epoch_index):
             last_loss = running_loss / 1000
             print("  batch {} loss: {}".format(i + 1, last_loss))
             tb_x = epoch_index * 1000000 + i + 1
+
             print('Loss/train', last_loss, tb_x)
+            writer.add_scalar('Loss/train', last_loss, tb_x)
+
             print('Loss of identity:', loss_fn(inputs, expected_outputs).item())
+            writer.add_scalar('Loss/identity', loss_fn(inputs, expected_outputs).item(), tb_x)
             running_loss = 0.
     
     return last_loss
