@@ -6,7 +6,7 @@ from . import utils
 
 OUT_CHANNELS = 16
 
-class Residual(nn.Module):
+class Residual(utils.TimestepBlock):
     def __init__(self, in_channels, out_channels, embedding_channels, dropout_rate, normalization_groups):
         super(Residual, self).__init__()
 
@@ -54,11 +54,10 @@ class Residual(nn.Module):
         return batch + resid
 
 class Attention(nn.Module):
-    def __init__(self, dims, channels, normalization_groups, num_heads):
+    def __init__(self, channels, normalization_groups, num_heads):
         super(AttentionResid, self).__init__()
         assert(channels % num_heads == 0)
         
-        self.dims = dims
         self.channels = channels
         self.num_heads = num_heads
 
@@ -88,79 +87,123 @@ class Attention(nn.Module):
         return batch.reshape(orig_batch.shape) + orig_batch
        
 class Diffuser(torch.nn.Module):
-    def __init__(self, device=None, channels=32, timestamp_channels=10, num_attentions=8, num_heads=1):
+    def __init__(self, dropout_rate, normalization_groups, channels=32, num_attentions=8, num_heads=1, num_residuals=3):
         super(Diffuser, self).__init__()
         # input is b x 3 x 28 x 28
-        self.channels=channels
-        self.timestamp_channels=timestamp_channels
+        self.time_embed = None
+        self.in_layer = None
 
-        # work out math on this later
-        # Wouldn't we want this to be a conv2d also?
-        self.conv1 = nn.Conv1d(3+self.timestamp_channels, self.channels, 1) # why do we want more channels here?
+        self.down_layers = nn.ModuleList([])
+        self.middle_layer = None
+        self.up_layers = nn.ModuleList([])
 
-        self.attention_resid_blocks = nn.ModuleList([])
-        self.interpolate_blocks = nn.ModuleList([])
-        self.dense_layers = nn.ModuleList([])
+        self.out_layer = None
 
-        print("Embedding dimensions:", channels)
-        # With this list of items how does it magic the backwards pass?
+        self.channel_multiple_schedule = [1, 2, 3]
 
-        # attention residual blocks
-        self.attention_resid_blocks.append(AttentionResid((28, 28), channels))
-        self.attention_resid_blocks.append(AttentionResid((14, 14), channels*2))
-        self.attention_resid_blocks.append(AttentionResid((7, 7), channels*4))
-        self.attention_resid_blocks.append(AttentionResid((7, 7), channels*4))
-        self.attention_resid_blocks.append(AttentionResid((14, 14), channels*2))
-        self.attention_resid_blocks.append(AttentionResid((28, 28), channels))
+        # State used in forward
+        self.channels = channels
 
-        # downsampling blocks
-        self.dense_layers.append(nn.Conv1d(channels, channels*2, 1))
-        self.dense_layers.append(nn.Conv1d(channels*2, channels*4, 1))
+        # TODO: Why do we use this number of timestamp channels
+        timestamp_channels = 4 * self.channels
+        self.timestamp_channels = timestamp_channels
 
-        # upsampling blocks
-        self.dense_layers.append(nn.Conv1d(channels*4, channels*2, 1))
-        self.dense_layers.append(nn.Conv1d(channels*2, channels, 1))
-
-
-
-        self.final_conv = nn.Conv1d(channels, 3, 1).to(device)
-
-    def forward(self, steps, x):
-        batch_len, init_channels, height, width = x.shape
-
-        # sinusoidal timestep embedding
-        timestamp_embedding = utils.timestep_embedding(steps, self.timestamp_channels)
-
-        timestamp_embedding = torch.broadcast_to(timestamp_embedding.unsqueeze(2), (batch_len, self.timestamp_channels, height*width))
-
-        data = x.reshape(batch_len, init_channels, -1)
-
-        data_and_timestamps = torch.cat((data, timestamp_embedding), dim=1)
-
-        y2 = F.silu(self.conv1(data_and_timestamps))
+        # Learned linear layers for timestamp embedding
+        self.time_embed = nn.Sequential(
+            nn.Linear(self.channels, self.timestamp_channels),
+            nn.SiLU(),
+            nn.Linear(self.timestamp_channels, self.timestamp_channels),
+        )
         
-        intermediate = y2.reshape(batch_len, self.channels, height, width)
+        # Initial convolution layer to higher channels
+        self.in_layer = nn.Conv2d(3, channels, 3, padding=1)
 
-        # Do series of attention resid blocks
-        intermediate = self.attention_resid_blocks[0](intermediate)
-        intermediate = self.dense_layers[0](intermediate)
-        intermediate = F.avg_pool2d(intermediate, (2, 2), 2)
+        # Do layers on the way down
+        # (Res -> Attn) -> Downsample
+        cur_channels = self.channels
+        for i, channel_multiple in enumerate(self.channel_multiple_schedule):
+            is_last_block = (i == len(self.channel_multiple_schedule) - 1)
+            channels_out = self.channels*channel_multiple
 
-        intermediate = self.attention_resid_blocks[1](intermediate)
-        intermediate = self.dense_layers[1](intermediate)
-        intermediate = F.avg_pool2d(intermediate, (2, 2), 2)
+            for j in range(num_residuals):
+                sub_layers = []
+                
+                sub_layers.append(Residual(cur_channels, channels_out, timestamp_channels, dropout_rate, normalization_groups))
+                cur_channels = channels_out
 
-        intermediate = self.attention_resid_blocks[2](intermediate)
-        intermediate = self.attention_resid_blocks[3](intermediate)
+                sub_layers.append(Attention(cur_channels, normalization_groups, num_heads))
 
-        intermediate = self.dense_layers[2](intermediate)
-        intermediate = F.interpolate(intermediate, size=(14, 14), mode="nearest")
-        intermediate = self.attention_resid_blocks[4](intermediate)
+                self.down_layers.append(utils.TimestepEmbedSequential(*sub_layers))
 
-        intermediate = self.dense_layers[3](intermediate)
-        intermediate = F.interpolate(intermediate, size=(28, 28), mode="nearest")
-        intermediate = self.attention_resid_blocks[5](intermediate)
+            # We downsample except right before the middle layers
+            if not is_last_block:
+                self.down_layers.append(nn.AvgPool2d(kernel_size=2, stride=2))
 
-        final = self.final_conv(intermediate)
+            sub_layers.append(Attention(channels, normalization_groups, num_heads))
 
-        return final.reshape(batch_len, 3, height, width)
+        # Middle layers
+        self.middle_layer = utils.TimestepEmbedSequential(  
+            Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
+            Attention(cur_channels, normalization_groups, num_heads),
+            Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
+        )
+
+        # Do layers on the way up
+        # (Res -> Attn) -> Res -> Attn -> Upsample
+        for i, channel_multiple in reversed(enumerate(self.channel_multiple_schedule)):
+            is_last_block = (i == 0)
+            channels_out = self.channels*channel_multiple
+
+            for j in range(num_residuals):
+                sub_layers = []
+                sub_layers.append(Residual(cur_channels, channels_out, timestamp_channels, dropout_rate, normalization_groups))
+                cur_channels = channels_out
+
+                sub_layers.append(Attention(cur_channels, normalization_groups, num_heads))
+
+                self.up_layers.append(utils.TimestepEmbedSequential(*sub_layers))
+
+            if not is_last_block:
+                self.up_layers.append(utils.TimestepEmbedSequential(
+                     Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
+                     Attention(cur_channels, normalization_groups, num_heads),
+                     utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'),
+                ))
+
+        self.out_layer = nn.Sequential(
+            nn.GroupNorm(normalization_groups, cur_channels),
+            nn.SiLU(),
+            nn.Conv2d(in_channels=cur_channels, out_channels=3, kernel_size=3, padding=1),
+        )
+
+
+    def forward(self, orig_batch, timesteps):
+        skip_connections = []
+
+        # Get embedded timestamps by blowing up with a linear layer
+        embedded_timestamps = utils.timestep_embedding(timesteps, self.channels)
+        embedded_timestamps = self.time_embed(embedded_timestamps)
+
+        # Do input layer
+        batch = self.in_layer(orig_batch)
+
+        # Do downsamplings
+        for layer in self.down_layers:
+            batch = layer(batch, embedded_timestamps)
+            skip_connections.append(batch)
+
+        # Do middle layer
+        batch = self.middle_layer(batch, embedded_timestamps)
+
+        # Do upsamplings
+        for layer in self.up_layers:
+            batch = torch.cat([batch, skip_connections.pop()], dim=1)
+            batch = layer(batch, embedded_timestamps)
+
+        # Do output layer
+        batch = self.out_layer(batch)
+
+        return batch
+
+
+
