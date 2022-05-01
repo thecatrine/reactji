@@ -1,4 +1,5 @@
 import math
+from abc import abstractmethod
 
 import torch as th
 import torch.nn as nn
@@ -78,8 +79,13 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
                 x = layer(x, emb)
             else:
                 x = layer(x)
-        return 
+        return x
 
+
+def zero_module(module):
+    for p in module.parameters():
+        p.detach().zero_()
+    return module
 # My utils
 
 class InvokeFunction(nn.Module):

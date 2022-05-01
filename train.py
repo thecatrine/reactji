@@ -77,7 +77,7 @@ print("Device:", device)
 
 ## Attempt training
 
-model = diffuser.Diffuser()
+model = diffuser.Diffuser(dropout_rate=0.1, normalization_groups=32)
 if args.resume:
     print("Resuming from {}".format(args.resume))
     model.load_state_dict(torch.load(args.resume))
@@ -104,7 +104,7 @@ def train_one_epoch(training_batch_generator, total_len, epoch_index):
         s, inputs, expected_outputs = s.to(device), inputs.to(device), expected_outputs.to(device)
         
         optimizer.zero_grad()
-        outputs = model(s, inputs)
+        outputs = model(inputs, s)
         loss = loss_fn(outputs, expected_outputs)
 
         loss.backward()
@@ -149,7 +149,7 @@ for epoch in range(EPOCHS):
         vdata = next(test_batch_generator)
         s, vinputs, vlabels = vdata
         s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
-        voutputs = model(s, vinputs)
+        voutputs = model(vinputs, s)
         vloss = loss_fn(voutputs, vlabels)
         running_vloss += vloss.item()
     
