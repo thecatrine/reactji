@@ -38,15 +38,15 @@ n_train, training_image_generator, n_test, test_image_generator, n_valid, valida
 images = []
 for i in range(8):
     image = next(test_image_generator)
-    #images.append(twitch.noise_img(image, 50).unsqueeze(0))
-    images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
+    images.append(twitch.noise_img(image, 50).unsqueeze(0))
+    #images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
 # Try to generate something
 
 all_images = []
 
 temp = torch.cat(images, dim=0)
 with torch.no_grad():
-    for i in range(150, 0, -1):
+    for i in range(50, 0, -1):
         s = torch.Tensor([i])
         outputs = model.forward(s, temp)
         print(i, "shape: ", outputs.shape)
