@@ -31,10 +31,9 @@ class Diffuser(torch.nn.Module):
             # Batch first? Who tf knows
             self.attention_blocks.append(nn.MultiheadAttention(28*28, num_heads, batch_first=True))
             # What is the embedding dimension here?
-            self.residual_blocks.append(nn.Conv1d(channels, channels, 1))
+            self.residual_blocks.append(nn.Conv2d(channels, channels, 3, padding=1))
 
         self.final_conv = nn.Conv1d(channels, 3, 1).to(device)
-
 
     def forward(self, steps, x):
         batch_len, init_channels, height, width = x.shape
@@ -63,9 +62,12 @@ class Diffuser(torch.nn.Module):
             attn_output, attn_output_weights = attention_block(query(intermediate), key(intermediate), value(intermediate))
 
             attn = F.silu(attn_output)
+            attn = attn.reshape(batch_len, self.channels, height, width)
+            attn = residual_block(attn)
+            attn = attn.reshape(batch_len, self.channels, -1)
             # why not attn? 
             # do we SiLU both things?
-            resid = F.silu(residual_block(attn) + intermediate)
+            resid = F.silu(attn + intermediate)
 
             intermediate = resid
 

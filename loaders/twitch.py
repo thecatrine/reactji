@@ -9,26 +9,47 @@ import torch
 import torchvision
 
 import random
+import hashlib
 
 SEED = 12345
 # Seed random number generator
 random.seed(SEED)
 
-def get_from_zip():
-    with zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r') as zip:
-        print("Archive loaded")
-        namelist = zip.namelist()
-        random.shuffle(namelist)
-        for filename in namelist:
-            #print("opening file: " + filename)
-            image_data = zip.read(filename)
+def namelist_to_generator(zipfile, namelist):
+    for filename in namelist:
+        image_data = zipfile.read(filename)
 
-            try:
-                image = Image.open(io.BytesIO(image_data))
-                yield image_to_tensor(image.convert("RGB"))
-            except:
-                print("Error loading image: " + filename)
-                continue
+        try:
+            image = Image.open(io.BytesIO(image_data))
+            yield image_to_tensor(image.convert("RGB"))
+        except:
+            print("Error loading image: " + filename)
+            continue
+
+def get_from_zip(z_file):
+    print("Archive loaded")
+    namelist = z_file.namelist()
+    random.shuffle(namelist)
+
+    train_names = []
+    test_names = []
+    validation_names = []
+
+    for name in namelist:
+        name_hash = hashlib.sha256(name.encode('utf-8')).digest()
+        if name_hash[:1] < b"\x02":
+            validation_names.append(name)
+        elif name_hash[:1] < b"\x04":
+            test_names.append(name)
+        else:
+            train_names.append(name)
+
+    print("Training:", len(train_names))
+    print("Testing:", len(test_names))
+    print("Validation:", len(validation_names))
+
+    # return three generators
+    return len(train_names), namelist_to_generator(z_file, train_names), len(test_names), namelist_to_generator(z_file, test_names), len(validation_names), namelist_to_generator(z_file, validation_names)
 
 def noise_img(img, n=1, alpha=0.95):                    
     return torch.normal(np.sqrt(alpha**n)*img, (1-alpha**n))

@@ -11,47 +11,7 @@ import numpy as np
 from models import diffuser
 from loaders import twitch
 import random
-
-def batch_generator(batch_size, max_timesteps=1):
-    image_generator = twitch.get_from_zip()
-
-    # batch of inputs, batch of outputs
-
-    try:
-        while True:
-            batch_steps = []
-            batch_inputs = []
-            batch_outputs = []
-
-            i = 0
-            while i < batch_size:
-                try:
-                    current_image = next(image_generator)
-                    if current_image.shape != (3, 28 , 28):
-                        print("Skipping because of shape: ", current_image.shape)
-                        continue
-                except StopIteration:
-                    print("Reached end of archive")
-                    raise
-                except Exception as e:
-                    print("Skipping because of exception")
-                    print(e)
-                    print("---")
-                    continue
-                i += 1
-
-                # TODO: num steps that isn't just 1
-                num_steps = 0 # random.randint(0, max_timesteps)
-                noised_image_output = twitch.noise_img(current_image, num_steps)
-                noised_image_input = twitch.noise_img(noised_image_output, num_steps+1)
-
-                batch_steps.append(num_steps)
-                batch_outputs.append(noised_image_output.unsqueeze(0))
-                batch_inputs.append(noised_image_input.unsqueeze(0))
-
-            yield (torch.tensor(batch_steps), torch.cat(batch_inputs), torch.cat(batch_outputs))
-    except StopIteration as e:
-        pass
+import zipfile
 
 def render_batch(*args):
     foos = []
@@ -72,22 +32,27 @@ model.load_state_dict(torch.load("best_model.pth"))
 model.eval()
 
 #
-gen = twitch.get_from_zip()
+
+z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
+n_train, training_image_generator, n_test, test_image_generator, n_valid, validation_image_generator = twitch.get_from_zip(z_file)
 images = []
 for i in range(8):
-    image = next(gen)
-    images.append(twitch.noise_img(image, 75).unsqueeze(0))
+    image = next(test_image_generator)
+    #images.append(twitch.noise_img(image, 50).unsqueeze(0))
+    images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
 # Try to generate something
 
 all_images = []
 
 temp = torch.cat(images, dim=0)
-for i in range(75, 0, -1):
-    s = torch.Tensor([i])
-    outputs = model.forward(s, temp)
-    print("shape: ", outputs.shape)
-    all_images.append(outputs)
-    temp = outputs
+with torch.no_grad():
+    for i in range(150, 0, -1):
+        s = torch.Tensor([i])
+        outputs = model.forward(s, temp)
+        print(i, "shape: ", outputs.shape)
+        if i % 5 == 0:
+            all_images.append(outputs)
+        temp = outputs
 
 render_batch(*all_images)
 

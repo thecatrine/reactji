@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import matplotlib.pyplot as plt
 
-
+import zipfile
 from models import diffuser
 import argparse
 
@@ -21,9 +21,7 @@ p.add_argument('--resume', default="")
 args = p.parse_args()
 
 
-def batch_generator(batch_size, max_timesteps=150):
-    image_generator = twitch.get_from_zip()
-
+def batch_generator(image_generator, batch_size, max_timesteps=150):
     # batch of inputs, batch of outputs
 
     try:
@@ -94,12 +92,13 @@ BATCH_SIZE = 128
 
 writer = SummaryWriter()
 
-def train_one_epoch(epoch_index):
+def train_one_epoch(training_batch_generator, total_len, epoch_index):
     running_loss = 0.
     last_loss = 0.
 
     i = 0
-    for data in batch_generator(BATCH_SIZE):
+
+    for data in training_batch_generator:
         i += 1
         s, inputs, expected_outputs = data
         s, inputs, expected_outputs = s.to(device), inputs.to(device), expected_outputs.to(device)
@@ -113,9 +112,9 @@ def train_one_epoch(epoch_index):
 
         running_loss += loss.item()
         if i % 100 == 99:
-            last_loss = running_loss / 1000
+            last_loss = running_loss / 100
             print("  batch {} loss: {}".format(i + 1, last_loss))
-            tb_x = epoch_index * 1000000 + i + 1
+            tb_x = epoch_index * total_len + i*inputs.shape[0] + 1
 
             print('Loss/train', last_loss, tb_x)
             writer.add_scalar('Loss/train', last_loss, tb_x)
@@ -128,29 +127,37 @@ def train_one_epoch(epoch_index):
 
 # Train it
 
-EPOCHS = 10
+EPOCHS = 100
 best_vloss = 10e10
+
+z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
 
 for epoch in range(EPOCHS):
     print("Epoch {}".format(epoch + 1))
-    model.train(True)
-    train_loss = train_one_epoch(epoch)
 
+    N_train, training_image_generator, N_test, test_image_generator, N_validate, validation_image_generator = twitch.get_from_zip(z_file)
+
+    training_batch_generator = batch_generator(training_image_generator, BATCH_SIZE)
+    test_batch_generator = batch_generator(test_image_generator, BATCH_SIZE)
+
+    model.train(True)
+    train_loss = train_one_epoch(training_batch_generator, N_train, epoch)
     model.train(False)
 
     running_vloss = 0.
-    validation = batch_generator(BATCH_SIZE)
-    for j in range(20): # I dunno do some batches
-        vdata = next(validation)
+    for i in range(20): # I dunno do some batches
+        vdata = next(test_batch_generator)
         s, vinputs, vlabels = vdata
         s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
         voutputs = model(s, vinputs)
         vloss = loss_fn(voutputs, vlabels)
         running_vloss += vloss.item()
     
-    avg_vloss = running_vloss / 1000000
+    # Is this right?
+    avg_vloss = running_vloss / 20
     print('LOSS train {} valid {}'.format(train_loss, avg_vloss))
+    writer.add_scalar('Loss/valid', avg_vloss, epoch)
 
     if avg_vloss < best_vloss:
         best_vloss = avg_vloss
-        torch.save(model.state_dict(), 'best_model.pth')
+        torch.save(model.state_dict(), f"best_model_{epoch}.pth")
