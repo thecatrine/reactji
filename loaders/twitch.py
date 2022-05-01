@@ -17,7 +17,11 @@ random.seed(SEED)
 
 def namelist_to_generator(zipfile, namelist):
     for filename in namelist:
-        image_data = zipfile.read(filename)
+        try:
+            image_data = zipfile.read(filename)
+        except:
+            print("Zipfile read error")
+            break
 
         try:
             image = Image.open(io.BytesIO(image_data))
