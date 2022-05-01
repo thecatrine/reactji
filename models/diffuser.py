@@ -5,6 +5,38 @@ import torch.nn.functional as F
 from . import utils
 
 OUT_CHANNELS = 16
+
+class AttentionResid(nn.Module):
+    def __init__(self, dims, channels, num_heads=1):
+        super(AttentionResid, self).__init__()
+
+        self.channels = channels
+        self.dims = dims
+        total_dim = dims[0]*dims[1]
+
+        self.query_conv = nn.Conv1d(self.channels, self.channels, 1)
+        self.key_conv = nn.Conv1d(self.channels, self.channels, 1)
+        self.value_conv = nn.Conv1d(self.channels, self.channels, 1)
+
+        self.attention_block = nn.MultiheadAttention(total_dim, num_heads, batch_first=True)
+        self.residual_block = nn.Conv2d(self.channels, self.channels, 3, padding=1)
+        pass
+
+    def forward(self, x):
+        batch_len, channels, dims = x.shape
+        ydim, xdim = self.dims
+        
+        y, weights = self.attention_block(self.query_conv(x), self.key_conv(x), self.value_conv(x))
+
+        y = F.silu(y)
+        y = y.reshape(batch_len, self.channels, ydim, xdim)
+        
+        # TODO: This feels like a weird place to put the conv2d, and a weird name for it
+        y = self.residual_block(y)
+        y = y.reshape(batch_len, self.channels, -1)
+
+        # Add back in the original channels
+        return F.silu(y + x)
 class Diffuser(torch.nn.Module):
     def __init__(self, device=None, channels=32, timestamp_channels=10, num_attentions=8, num_heads=1):
         super(Diffuser, self).__init__()
@@ -14,24 +46,14 @@ class Diffuser(torch.nn.Module):
 
         # work out math on this later
         self.conv1 = nn.Conv1d(3+self.timestamp_channels, self.channels, 1) # why do we want more channels here?
-        self.queryList = nn.ModuleList([])
-        self.keyList = nn.ModuleList([])
-        self.valueList = nn.ModuleList([])
 
-        self.attention_blocks = nn.ModuleList([])
-        self.residual_blocks = nn.ModuleList([])
+        self.attention_resid_blocks = nn.ModuleList([])
 
         print("Embedding dimensions:", channels)
         # With this list of items how does it magic the backwards pass?
 
         for i in range(num_attentions):
-            self.queryList.append(nn.Conv1d(channels, channels, 1))
-            self.keyList.append(nn.Conv1d(channels, channels, 1))
-            self.valueList.append(nn.Conv1d(channels, channels, 1))
-            # Batch first? Who tf knows
-            self.attention_blocks.append(nn.MultiheadAttention(28*28, num_heads, batch_first=True))
-            # What is the embedding dimension here?
-            self.residual_blocks.append(nn.Conv2d(channels, channels, 3, padding=1))
+            self.attention_resid_blocks.append(AttentionResid((28, 28), channels))
 
         self.final_conv = nn.Conv1d(channels, 3, 1).to(device)
 
@@ -49,27 +71,10 @@ class Diffuser(torch.nn.Module):
 
         y2 = F.silu(self.conv1(data_and_timestamps))
         
-        # TODO: Embed the step somewhow
         intermediate = y2
-        for i in range(len(self.attention_blocks)):
-            attention_block = self.attention_blocks[i]
-            residual_block = self.residual_blocks[i]
-
-            query = self.queryList[i]
-            key = self.keyList[i]
-            value = self.valueList[i]
-
-            attn_output, attn_output_weights = attention_block(query(intermediate), key(intermediate), value(intermediate))
-
-            attn = F.silu(attn_output)
-            attn = attn.reshape(batch_len, self.channels, height, width)
-            attn = residual_block(attn)
-            attn = attn.reshape(batch_len, self.channels, -1)
-            # why not attn? 
-            # do we SiLU both things?
-            resid = F.silu(attn + intermediate)
-
-            intermediate = resid
+        for i in range(len(self.attention_resid_blocks)):
+            attention_resid = self.attention_resid_blocks[i]
+            intermediate = attention_resid(intermediate)
 
         final = self.final_conv(intermediate)
 
