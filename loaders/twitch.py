@@ -19,16 +19,20 @@ def namelist_to_generator(zipfile, namelist):
     for filename in namelist:
         try:
             image_data = zipfile.read(filename)
-        except:
+        except Exception as e:
             print("Zipfile read error")
-            break
+            print(e)
+            continue
 
         try:
             image = Image.open(io.BytesIO(image_data))
-            yield image_to_tensor(image.convert("RGB"))
+            image = image.convert('RGB')
+            tensor = image_to_tensor(image)
         except:
             print("Error loading image: " + filename)
             continue
+
+        yield tensor
 
 def get_from_zip(z_file):
     print("Archive loaded")
