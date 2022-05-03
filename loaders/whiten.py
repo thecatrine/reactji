@@ -2,7 +2,7 @@ import zipfile
 
 from sklearn.preprocessing import StandardScaler
 
-from loaders import twitch
+#from loaders import twitch
 import random
 import torch
 import pickle
@@ -42,8 +42,8 @@ def batch_generator(image_generator, batch_size, max_timesteps=150):
 
 
 class Whitener:
-    def __init(self, height, width):
-        with open('loaders/constants/scaler.p', 'rb') as f:
+    def __init__(self, height, width):
+        with open('constants/scaler.p', 'rb') as f:
             self.scaler = pickle.load(f)
         self.height = height
         self.width = width
@@ -52,7 +52,7 @@ class Whitener:
         image = torch.permute(orig, (1, 2, 0))
         image = image.reshape(self.height*self.width, -1)
 
-        image = func(image)
+        image = torch.tensor(func(image))
 
         image = image.reshape(self.height, self.width, -1)
         image = torch.permute(image, (2, 0, 1))
@@ -66,22 +66,38 @@ class Whitener:
         return self.a(transformed, self.scaler.inverse_transform)
     
 
-if __name__ == "__main__":
-    z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
+# if __name__ == "__main__":
+#     z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
 
-    N_train, training_image_generator, N_test, test_image_generator, N_validate, validation_image_generator = twitch.get_from_zip(z_file)
+#     N_train, training_image_generator, N_test, test_image_generator, N_validate, validation_image_generator = twitch.get_from_zip(z_file)
 
-    batch_generator = batch_generator(training_image_generator, batch_size=1024)
-    s, inputs, outputs = next(batch_generator)
+#     batch_generator = batch_generator(training_image_generator, batch_size=1024)
+#     s, inputs, outputs = next(batch_generator)
 
-    print("input shape: ", inputs.shape)
-    inputs = torch.permute(inputs, dims=(0, 2, 3, 1))
-    print("input shape: ", inputs.shape)
-    inputs = inputs.reshape(1024*28*28, -1)
+#     print("input shape: ", inputs.shape)
+#     inputs = torch.permute(inputs, dims=(0, 2, 3, 1))
+#     print("input shape: ", inputs.shape)
+#     inputs = inputs.reshape(1024*28*28, -1)
 
-    scaler = StandardScaler()
-    scaler.fit(inputs)
-    print("Mean: ", scaler.mean_)
+#     scaler = StandardScaler()
+#     scaler.fit(inputs)
 
-    with open('loaders/constants/scaler.p', 'wb') as f:
-        pickle.dump(scaler, f)
+#     print("Mean: ", scaler.mean_)
+
+#     import matplotlib.pyplot as plt
+#     white = Whitener(28, 28)
+#     im = outputs[0]
+#     print("image shape: ", im.shape)
+#     im2 = white.transform(im)
+
+#     plt.imshow(twitch.tensor_to_image(im2))
+#     plt.show()
+
+#     im3 = white.untransform(im2)
+
+#     plt.imshow(twitch.tensor_to_image(im3))
+#     plt.show()
+
+#     import pdb; pdb.set_trace()
+#     #with open('loaders/constants/scaler.p', 'wb') as f:
+#         #pickle.dump(scaler, f)
