@@ -8,9 +8,9 @@ import random
 import torch
 import torchvision
 import zipfile
-from .loader_utils import image_to_tensor, noise_img, max_ts
+from .loader_utils import image_to_tensor, noise_img, weighted_timestep
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 class TwitchDataset(Dataset):
     def __init__(self, z_file, namelist, max_ts=1000, alpha=0.99):
@@ -29,7 +29,7 @@ class TwitchDataset(Dataset):
         try:
             image_data = self.z_file.read(filename)
         except Exception as e:
-            logger.debug(f'Error loading image {filename}: {e}')
+            log.debug(f'Error loading image {filename}: {e}')
             return None
 
         try:
@@ -37,14 +37,14 @@ class TwitchDataset(Dataset):
             image = image.convert('RGBA')
             tensor = image_to_tensor(image)
             if tensor.shape != (3, 28, 28):
-                logger.debug(f'Image {filename} has dimensions {tensor.shape}')
+                log.debug(f'Image {filename} has dimensions {tensor.shape}')
                 return None
-            steps = weighted_timestep(max_ts)
+            steps = weighted_timestep(self.max_ts)
             img_out = noise_img(tensor, steps, self.alpha)
             img_in = noise_img(img_out, 1, self.alpha)
             return (torch.tensor(steps), img_in, img_out)
         except Exception as e:
-            logger.debug(f'Error parsing image {filename}: {e}')
+            log.debug(f'Error parsing image {filename}: {e}')
             return None
 
 class TwitchData():

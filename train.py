@@ -11,12 +11,13 @@ import torchvision
 import zipfile
 import numpy as np
 import os
+import time
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
 log = logging.getLogger(__name__)
 
-LR = float(os.environ.get('LR', '0.002'))
+LR = float(os.environ.get('LR', '0.001'))
 log.info(f'Using LR={LR}')
 BATCH_SZ = int(os.environ.get('BATCH_SZ', '128'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
@@ -35,23 +36,23 @@ data = datasets.TwitchData(batch_size=BATCH_SZ)
 # Model
 log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-logger.info(f"Device: {device}")
-model = diffuser.Diffuser(dropout_rate=0.1, normalization_groups=32)
+log.info(f"Device: {device}")
+model = diffuser.Diffuser(dropout_rate=0.1)
 if args.resume:
-    logger.info("Resuming from {}...".format(args.resume))
+    log.info("Resuming from {}...".format(args.resume))
     model.load_state_dict(torch.load(args.resume))
 else:
-    logger.info('Initializing...')
+    log.info('Initializing...')
 log.info('Sending model to device...')
 model.to(device)
 # optimizer
 loss_fn = torch.nn.MSELoss()
-optimizer = torch.optim.NAdam(params=model.parameters(), lr=LR)
+optimizer = torch.optim.Adam(params=model.parameters(), lr=LR)
 
 # Tensorboard
 log.info('Configuring tensorboard...')
 id_loss = 3e-3
-iwriter = SummaryWriter()
+writer = SummaryWriter()
 
 def train_one_epoch(train_data, cur_epoch):
     model.train(True)
@@ -59,8 +60,11 @@ def train_one_epoch(train_data, cur_epoch):
     last_loss = 0.
 
     running_loss = 0
+    start_time = time.time()
+    processed = 0
     for i, batches in enumerate(train_data):
         timesteps, inputs, expected_outputs = [x.to(device) for x in batches]
+        processed += inputs.shape[0]
 
         optimizer.zero_grad()
         outputs = model(inputs, timesteps)
@@ -70,10 +74,10 @@ def train_one_epoch(train_data, cur_epoch):
         loss.backward()
         optimizer.step()
 
-        writer.add_scaler('train_loss_scaled', loss,
+        writer.add_scalar('train_loss_scaled', loss,
                           cur_epoch + (i*BATCH_SZ)/len(train_data))
-        if i%100 == 99:
-            log.info(f'Epoch {cur_epoch:03} | Train Batch {i+1:06} | {running_loss:.10f}')
+        if (i+1)%20 == 0:
+            log.info(f'Epoch {cur_epoch:03} | Train Batch {i+1:06} | Loss {running_loss:.10f} | ex/s {processed / (time.time() - start_time):03.0f}')
 
 def scaled_test_loss(test_data):
     model.train(False)

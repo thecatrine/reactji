@@ -59,22 +59,23 @@ class Residual(utils.TimestepBlock):
         return batch + resid
 
 class Attention(nn.Module):
-    def __init__(self, channels, normalization_groups, num_heads):
+    def __init__(self, channels, normalization_groups, num_head_channels):
         super().__init__()
-        assert(channels % num_heads == 0)
-        
         self.channels = channels
-        self.num_heads = num_heads
+        self.num_head_channels = num_head_channels
 
-        self.num_head_channels = channels // num_heads
+        print(channels, num_head_channels)
+        assert channels % num_head_channels == 0
+        self.num_heads = channels // num_head_channels
+
 
         self.norm1 = nn.GroupNorm(normalization_groups, channels)
 
         # Triple number of channels for q,k,v
         self.conv1 = nn.Conv1d(channels, channels*3, 1)
-        
+
         # Do we want dropout here?
-        self.attention = utils.QKVAttention(n_heads=num_heads)
+        self.attention = utils.QKVAttention(n_heads=self.num_heads)
 
         # Why do we have this
         self.conv2 = utils.zero_module(
@@ -94,9 +95,9 @@ class Attention(nn.Module):
         batch = self.conv2(batch)
 
         return batch.reshape(orig_batch.shape) + orig_batch
-       
+
 class Diffuser(torch.nn.Module):
-    def __init__(self, dropout_rate, normalization_groups, channels=32, num_attentions=8, num_heads=1, num_residuals=3):
+    def __init__(self, dropout_rate, normalization_groups=32, channels=192, num_head_channels=64, num_residuals=3):
         super(Diffuser, self).__init__()
         # input is b x 3 x 28 x 28
         self.time_embed = None
@@ -125,7 +126,7 @@ class Diffuser(torch.nn.Module):
             nn.Linear(self.timestamp_channels, self.timestamp_channels),
         )
         print("Timestamps ", self.channels, self.timestamp_channels)
-        
+
         # Initial convolution layer to higher channels
         self.in_layer = nn.Conv2d(3, channels, 3, padding=1)
         print("Convolution ", 3, channels)
@@ -139,12 +140,12 @@ class Diffuser(torch.nn.Module):
 
             for j in range(num_residuals):
                 sub_layers = []
-                
+
                 sub_layers.append(Residual(cur_channels, channels_out, timestamp_channels, dropout_rate, normalization_groups))
                 print("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                sub_layers.append(Attention(cur_channels, normalization_groups, num_heads))
+                sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
                 print("Adding Attention ", cur_channels, channels_out)
 
                 self.skip_sizes.append(cur_channels)
@@ -159,9 +160,9 @@ class Diffuser(torch.nn.Module):
                 print("<< Downsample ", cur_channels, channels_out)
 
         # Middle layers
-        self.middle_layer = utils.TimestepEmbedSequential(  
+        self.middle_layer = utils.TimestepEmbedSequential(
             Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
-            Attention(cur_channels, normalization_groups, num_heads),
+            Attention(cur_channels, normalization_groups, num_head_channels),
             Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
         )
 
@@ -183,7 +184,7 @@ class Diffuser(torch.nn.Module):
                 print("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                sub_layers.append(Attention(cur_channels, normalization_groups, num_heads))
+                sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
                 print("Adding Attention ", cur_channels, channels_out)
                 self.up_layers.append(utils.TimestepEmbedSequential(*sub_layers))
 
@@ -193,7 +194,7 @@ class Diffuser(torch.nn.Module):
                 # We need extra channels here because we add in skip connections
                 self.up_layers.append(utils.TimestepEmbedSequential(
                      Residual(skip_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
-                     Attention(cur_channels, normalization_groups, num_heads),
+                     Attention(cur_channels, normalization_groups, num_head_channels),
                      utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'),
                 ))
                 print(">> Adding Upsample ", cur_channels, cur_channels)

@@ -43,6 +43,7 @@ class QKVAttention(nn.Module):
         bs, width, length = qkv.shape
         assert width % (3 * self.n_heads) == 0
         ch = width // (3 * self.n_heads)
+
         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
         if encoder_kv is not None:
             assert encoder_kv.shape[1] == self.n_heads * ch * 2

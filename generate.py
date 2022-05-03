@@ -27,7 +27,7 @@ def render_batch(*args):
 #render_batch(inputs, outputs)
 
 print("Loading models")
-model = diffuser.Diffuser(dropout_rate=0.1, normalization_groups=32)
+model = diffuser.Diffuser(dropout_rate=0.1)
 model.load_state_dict(torch.load("best_model_4.pth"))
 model.eval()
 
