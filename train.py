@@ -86,7 +86,7 @@ model.to(device)
 loss_fn = torch.nn.MSELoss()
 
 # optimizer
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 
 BATCH_SIZE = 100
 
