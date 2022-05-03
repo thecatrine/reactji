@@ -2,13 +2,19 @@ from loaders import datasets
 from models import diffuser
 from models import diffuser
 from torch.utils.tensorboard import SummaryWriter
-from logging import logger
+import logging
 import argparse
 import matplotlib.pyplot as plt
 import random
 import torch
 import torchvision
 import zipfile
+import numpy as np
+import os
+
+LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
+logging.basicConfig(level=LOGLEVEL)
+logger = logging.getLogger(__name__)
 
 random.seed(0)
 np.random.seed(0)
@@ -54,7 +60,7 @@ def train_one_epoch(train_data, total_len, epoch_index):
     last_loss = 0.
 
     for i, batches in enumerate(train_data):
-        s, inputs, expected_outputs = data
+        s, inputs, expected_outputs = batches
         s, inputs, expected_outputs = (
             s.to(device), inputs.to(device), expected_outputs.to(device))
         batch_sz = s.shape[0]
@@ -98,7 +104,7 @@ for epoch in range(EPOCHS):
     test_data = dataloaders['test']
 
     train_loss = train_one_epoch(train_data, len(train_data), epoch)
-    # TODO: pick up here, have test_once that sets model.train to False
+    model.train(False)
     test_batch_generator = batch_generator(test_image_generator, BATCH_SIZE)
     running_vloss = 0.
 
