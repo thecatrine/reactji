@@ -129,11 +129,5 @@ for epoch in range(EPOCHS):
 
     if avg_vloss < best_vloss:
         best_vloss = avg_vloss
-<<<<<<< HEAD
-        torch.save(model.state_dict(), f"best_model_{epoch}.pth")
-||||||| d183d16
-        torch.save(model.state_dict(), f"best_model_{epoch}.pth")
-=======
         torch.save(model.state_dict(), f"best_model_{epoch}.pth")
     torch.save(model.state_dict(), f"cur_model.pth")
->>>>>>> 2408394cf558d9557dcef17f26677ebb02e84563
