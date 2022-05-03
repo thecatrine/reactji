@@ -27,18 +27,19 @@ def render_batch(*args):
 #render_batch(inputs, outputs)
 
 print("Loading models")
-model = diffuser.Diffuser()
-model.load_state_dict(torch.load("best_model.pth"))
+model = diffuser.Diffuser(dropout_rate=0.1, normalization_groups=32)
+model.load_state_dict(torch.load("best_model_4.pth"))
 model.eval()
 
 #
+STAPS=50
 
 z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
 n_train, training_image_generator, n_test, test_image_generator, n_valid, validation_image_generator = twitch.get_from_zip(z_file)
 images = []
 for i in range(8):
     image = next(test_image_generator)
-    images.append(twitch.noise_img(image, 50).unsqueeze(0))
+    images.append(twitch.noise_img(image, STAPS).unsqueeze(0))
     #images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
 # Try to generate something
 
@@ -46,13 +47,15 @@ all_images = []
 
 temp = torch.cat(images, dim=0)
 with torch.no_grad():
-    for i in range(50, 0, -1):
-        s = torch.Tensor([i])
-        outputs = model.forward(s, temp)
+    for i in range(STAPS, 0, -1):
+        s = torch.Tensor([i-1])
+        outputs = model.forward(temp, s)
         print(i, "shape: ", outputs.shape)
         if i % 5 == 0:
             all_images.append(outputs)
         temp = outputs
+    
+    twitch.tensor_to_image(temp[0]).save('emoji-test.png')
 
 render_batch(*all_images)
 

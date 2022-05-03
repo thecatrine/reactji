@@ -86,7 +86,7 @@ model.to(device)
 loss_fn = torch.nn.MSELoss()
 
 # optimizer
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 BATCH_SIZE = 100
 
@@ -170,3 +170,4 @@ for epoch in range(EPOCHS):
     if avg_vloss < best_vloss:
         best_vloss = avg_vloss
         torch.save(model.state_dict(), f"best_model_{epoch}.pth")
+    torch.save(model.state_dict(), f"cur_model.pth")
