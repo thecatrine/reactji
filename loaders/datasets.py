@@ -8,15 +8,15 @@ import random
 import torch
 import torchvision
 import zipfile
-from .loader_utils import image_to_tensor, noise_img
+from .loader_utils import image_to_tensor, noise_img, max_ts
 
 logger = logging.getLogger(__name__)
 
 class TwitchDataset(Dataset):
-    def __init__(self, z_file, namelist, max_steps=150, alpha=0.95):
+    def __init__(self, z_file, namelist, max_ts=1000, alpha=0.99):
         super().__init__()
-        self.max_steps = 150
-        self.alpha = 0.95
+        self.max_ts = max_ts
+        self.alpha = 0.99
         self.z_file = z_file
         self.namelist = namelist
 
@@ -34,12 +34,12 @@ class TwitchDataset(Dataset):
 
         try:
             image = Image.open(io.BytesIO(image_data))
-            image = image.convert('RGB')
+            image = image.convert('RGBA')
             tensor = image_to_tensor(image)
             if tensor.shape != (3, 28, 28):
                 logger.debug(f'Image {filename} has dimensions {tensor.shape}')
                 return None
-            steps = np.random.randint(self.max_steps)
+            steps = weighted_timestep(max_ts)
             img_out = noise_img(tensor, steps, self.alpha)
             img_in = noise_img(img_out, 1, self.alpha)
             return (torch.tensor(steps), img_in, img_out)

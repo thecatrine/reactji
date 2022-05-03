@@ -14,7 +14,12 @@ import os
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
+
+LR = float(os.environ.get('LR', '0.002'))
+log.info(f'Using LR={LR}')
+BATCH_SZ = int(os.environ.get('BATCH_SZ', '128'))
+log.info(f'Using BATCH_SZ={BATCH_SZ}')
 
 random.seed(0)
 np.random.seed(0)
@@ -23,111 +28,85 @@ p = argparse.ArgumentParser()
 p.add_argument('--resume', default="")
 args = p.parse_args()
 
-
-def render_batch(batch_in, batch_out):
-    grid_in = torchvision.utils.make_grid(batch_in)
-    grid_out = torchvision.utils.make_grid(batch_out)
-
-    res = torch.cat((grid_in, grid_out), dim=1)
-    res = twitch.tensor_to_image(res)
-
-    plt.imshow(res)
-    plt.show()
-
-
-
 # Data
-data = datasets.TwitchData(batch_size=128)
+log.info('Loading twitch dataset...')
+data = datasets.TwitchData(batch_size=BATCH_SZ)
 
 # Model
+log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 logger.info(f"Device: {device}")
 model = diffuser.Diffuser(dropout_rate=0.1, normalization_groups=32)
 if args.resume:
-    logger.info("Resuming from {}".format(args.resume))
+    logger.info("Resuming from {}...".format(args.resume))
     model.load_state_dict(torch.load(args.resume))
+else:
+    logger.info('Initializing...')
+log.info('Sending model to device...')
 model.to(device)
-loss_fn = torch.nn.MSELoss()
 # optimizer
-optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
-
+loss_fn = torch.nn.MSELoss()
+optimizer = torch.optim.NAdam(params=model.parameters(), lr=LR)
 
 # Tensorboard
-writer = SummaryWriter()
+log.info('Configuring tensorboard...')
+id_loss = 3e-3
+iwriter = SummaryWriter()
 
-def train_one_epoch(train_data, total_len, epoch_index):
+def train_one_epoch(train_data, cur_epoch):
     model.train(True)
     running_loss = 0.
     last_loss = 0.
 
+    running_loss = 0
     for i, batches in enumerate(train_data):
-        s, inputs, expected_outputs = batches
-        s, inputs, expected_outputs = (
-            s.to(device), inputs.to(device), expected_outputs.to(device))
-        batch_sz = s.shape[0]
+        timesteps, inputs, expected_outputs = [x.to(device) for x in batches]
 
         optimizer.zero_grad()
-        outputs = model(inputs, s)
-        loss = loss_fn(outputs, expected_outputs)
-
+        outputs = model(inputs, timesteps)
+        loss = loss_fn(outputs, expected_outputs) / id_loss
+        scale = min(i/(1+i), 0.99)
+        running_loss = scale*running_loss + (1-scale)*loss.item()
         loss.backward()
         optimizer.step()
 
-        running_loss += loss.item()
-        if i % 100 == 99:
-            last_loss = running_loss / 100
-            print("  batch {} loss: {}".format(i + 1, last_loss))
-            tb_x = epoch_index * total_len + i*inputs.shape[0] + 1
+        writer.add_scaler('train_loss_scaled', loss,
+                          cur_epoch + (i*BATCH_SZ)/len(train_data))
+        if i%100 == 99:
+            log.info(f'Epoch {cur_epoch:03} | Train Batch {i+1:06} | {running_loss:.10f}')
 
-            print('Loss/train', last_loss, tb_x)
-            writer.add_scalar('Loss/train', last_loss, tb_x)
+def scaled_test_loss(test_data):
+    model.train(False)
+    with torch.no_grad():
+        running_vloss = 0.
+        test_len = 0
+        for vdata in test_data:
+            s, vinputs, vlabels = vdata
+            s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
+            voutputs = model(vinputs, s)
+            vloss = loss_fn(voutputs, vlabels) / id_loss
+            running_vloss += vloss.item()
+            test_len += 1
+        return running_vloss / test_len
 
-            print('Loss of identity:', loss_fn(inputs, expected_outputs).item())
-            writer.add_scalar(
-                'Loss/identity', loss_fn(inputs, expected_outputs).item(), tb_x)
-            running_loss = 0.
+EPOCHS = 1000
+best_test_loss = 10e10
 
-
-    return last_loss
-
-# Train it
-
-EPOCHS = 100
-best_vloss = 10e10
-
-z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
-
+log.info('Training...')
 for epoch in range(EPOCHS):
-    print("Epoch {}".format(epoch + 1))
+    log.info(f'Epoch {epoch:03}:')
 
     dataloaders = data.dataloaders()
     train_data = dataloaders['train']
     test_data = dataloaders['test']
 
-    train_loss = train_one_epoch(train_data, len(train_data), epoch)
-    model.train(False)
-    test_batch_generator = batch_generator(test_image_generator, BATCH_SIZE)
-    running_vloss = 0.
+    train_loss = train_one_epoch(train_data, epoch)
+    log.info('Testing...')
+    test_loss = scaled_test_loss(test_data)
+    log.info(f'Epoch {epoch:03} | Test | {test_loss:.10f}')
+    writer.add_scalar('test_loss_scaled', test_loss)
 
-    test_len = 0
-    for vdata in test_batch_generator: # I dunno do some batches
-        s, vinputs, vlabels = vdata
-        s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
-        voutputs = model(vinputs, s)
-        vloss = loss_fn(voutputs, vlabels)
-        running_vloss += vloss.item()
-        test_len += 1
-
-    # Try to clean up variables
-    s, vinputs, vlabels = None, None, None
-    voutputs = None
-    vloss = None
-
-    avg_vloss = running_vloss / test_len
-    print('LOSS train {} valid {}'.format(train_loss, avg_vloss))
-    writer.add_scalar('Loss/valid', avg_vloss, epoch)
-
-    if avg_vloss < best_vloss:
-        best_vloss = avg_vloss
+    if test_loss < best_test_loss:
+        best_test_loss = test_loss
         torch.save(model.state_dict(), f"best_model_{epoch}.pth")
     torch.save(model.state_dict(), f"cur_model.pth")
