@@ -66,7 +66,7 @@ def noise_img(img, n=1, alpha=0.95):
 
 SCALE = 10
 
-whitener = whiten.Whitener(28, 28)
+whitener = whiten.Whitener()
 def image_to_tensor(im):
     tensor = torchvision.transforms.ToTensor()(im)
 
