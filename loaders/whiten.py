@@ -42,19 +42,18 @@ def batch_generator(image_generator, batch_size, max_timesteps=150):
 
 
 class Whitener:
-    def __init__(self, height, width):
+    def __init__(self):
         with open('loaders/constants/scaler.p', 'rb') as f:
             self.scaler = pickle.load(f)
-        self.height = height
-        self.width = width
 
     def a(self, orig, func):
+        _, height, width = orig.shape
         image = torch.permute(orig, (1, 2, 0))
-        image = image.reshape(self.height*self.width, -1)
+        image = image.reshape(height*width, -1)
 
         image = torch.tensor(func(image), dtype=torch.float32)
 
-        image = image.reshape(self.height, self.width, -1)
+        image = image.reshape(height, width, -1)
         image = torch.permute(image, (2, 0, 1))
 
         return image
