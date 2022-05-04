@@ -1,6 +1,5 @@
 from multiprocessing import dummy
 
-from black import validate_metadata
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -8,10 +7,17 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
 
+from loaders import datasets
 from models import diffuser
-from loaders import twitch
+from loaders import loader_utils
 import random
 import zipfile
+import os
+import logging
+
+LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
+logging.basicConfig(level=LOGLEVEL)
+log = logging.getLogger(__name__)
 
 def render_batch(*args):
     foos = []
@@ -19,7 +25,7 @@ def render_batch(*args):
         foos.append(torchvision.utils.make_grid(arg))
 
     res = torch.cat(foos, dim=1)
-    res = twitch.tensor_to_image(res)
+    res = loader_utils.tensor_to_image(res)
 
     plt.imshow(res)
     plt.savefig("batch.png", dpi=1000)
@@ -28,18 +34,20 @@ def render_batch(*args):
 
 print("Loading models")
 model = diffuser.Diffuser(dropout_rate=0.1)
-model.load_state_dict(torch.load("best_model_4.pth"))
+model.load_state_dict(torch.load("best_model_0.pth"))
 model.eval()
 
 #
 STAPS=50
 
-z_file = zipfile.ZipFile('loaders/data/twitch_archive.zip', 'r')
-n_train, training_image_generator, n_test, test_image_generator, n_valid, validation_image_generator = twitch.get_from_zip(z_file)
+data = datasets.TwitchData(batch_size=16, max_ts=0)
+dataloaders = data.dataloaders()
+test_data = iter(dataloaders['test'])
+
 images = []
+s, inputs, outputs = next(test_data)
 for i in range(8):
-    image = next(test_image_generator)
-    images.append(twitch.noise_img(image, STAPS).unsqueeze(0))
+    images.append(loader_utils.noise_img(outputs[i], STAPS).unsqueeze(0))
     #images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
 # Try to generate something
 
@@ -55,7 +63,7 @@ with torch.no_grad():
             all_images.append(outputs)
         temp = outputs
     
-    twitch.tensor_to_image(temp[0]).save('emoji-test.png')
+    loader_utils.tensor_to_image(temp[0]).save('emoji-test.png')
 
 render_batch(*all_images)
 

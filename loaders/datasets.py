@@ -49,12 +49,13 @@ class TwitchDataset(Dataset):
 
 class TwitchData():
     def __init__(self, path='loaders/data/twitch_archive.zip',
-                 batch_size=128, shuffle=True, num_workers=8):
+                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.num_workers = num_workers
         self.z_file = zipfile.ZipFile(path, 'r')
         self.full_namelist = self.z_file.namelist()
+        self.max_ts = max_ts
 
     def dataloaders(self):
         namelists = {}
@@ -73,10 +74,10 @@ class TwitchData():
             return default_collate(batch)
 
         for split, namelist in namelists.items():
-            dataset = TwitchDataset(self.z_file, namelist)
+            dataset = TwitchDataset(self.z_file, namelist, max_ts=self.max_ts)
             dataloaders[split] = DataLoader(
                 dataset, batch_size=self.batch_size, shuffle=self.shuffle,
-                num_workers=self.num_workers, collate_fn=collate_fn,
+                num_workers=self.num_workers, collate_fn=collate_fn
             )
 
         return dataloaders
