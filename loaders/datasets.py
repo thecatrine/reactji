@@ -58,6 +58,7 @@ class TwitchData():
         self.max_ts = max_ts
 
     def dataloaders(self):
+        random.shuffle(self.full_namelist)
         namelists = {}
         dataloaders = {}
         splits = [('val', b'\x02'), ('test', b'\x04'), ('train', None)]
