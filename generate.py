@@ -23,6 +23,9 @@ log = logging.getLogger(__name__)
 
 p = argparse.ArgumentParser()
 p.add_argument('--model', default="")
+p.add_argument('--noise', action='store_true')
+p.add_argument('--staps', default=50, type=int)
+p.add_argument('--stap-size', default=1, type=int)
 
 args = p.parse_args()
 
@@ -47,30 +50,39 @@ model.load_state_dict(torch.load(args.model))
 model.eval()
 
 #
-STAPS=150
+STAPS=args.staps
+STAP_SIZE = args.stap_size
 
 
-data = datasets.TwitchData(batch_size=16, max_ts=0)
+data = datasets.TwitchData(batch_size=128, max_ts=0)
 dataloaders = data.dataloaders()
 test_data = iter(dataloaders['test'])
 
 images = []
 s, inputs, outputs = next(test_data)
 for i in range(8):
-    images.append(loader_utils.noise_img(outputs[i], STAPS).unsqueeze(0))
-    #images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
+    if args.noise:
+        images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
+    else:
+        images.append(loader_utils.noise_img(outputs[i], STAPS).unsqueeze(0))
+    
 
 # Try to generate something
 
 all_images = []
 
+
+
 temp = torch.cat(images, dim=0)
 with torch.no_grad():
     for i in range(STAPS, 0, -1):
-        s = torch.Tensor([i-1])
+        s = torch.Tensor([i * STAP_SIZE - 1])
         outputs = model.forward(temp, s)
+        diff = outputs - temp
+        #print(diff)
+        outputs = temp + diff * STAP_SIZE
         print(i, "shape: ", outputs.shape)
-        if i % 5 == 1:
+        if i % 10 == 1:
             all_images.append(outputs)
         temp = outputs
     
