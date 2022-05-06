@@ -1,15 +1,21 @@
 import torchvision
 import numpy as np
 import torch
+import math
+from . import whiten
 
-
-def noise_img(img, n=1, alpha=0.95):
+def noise_img(img, n=1, alpha=0.99):
     return torch.normal(np.sqrt(alpha**n)*img, (1-alpha**n))
 
+def weighted_timestep(max_ts=1000):
+    return math.floor((np.random.random() * max_ts**0.5)**2)
+
 SCALE = 10
-whitener = whiten.Whitener(28, 28)
+whitener = whiten.Whitener()
 def image_to_tensor(im):
     tensor = torchvision.transforms.ToTensor()(im)
+    if tensor.shape[0] == 4:
+        tensor = tensor[:3, :, :]
 
     scaled_tensor = (tensor - 0.5) * SCALE
     return whitener.transform(scaled_tensor)
