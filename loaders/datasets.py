@@ -8,15 +8,15 @@ import random
 import torch
 import torchvision
 import zipfile
-from .loader_utils import image_to_tensor, noise_img
+from .loader_utils import image_to_tensor, noise_img, weighted_timestep
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 class TwitchDataset(Dataset):
-    def __init__(self, z_file, namelist, max_steps=150, alpha=0.95):
+    def __init__(self, z_file, namelist, max_ts=1000, alpha=0.99):
         super().__init__()
-        self.max_steps = 150
-        self.alpha = 0.95
+        self.max_ts = max_ts
+        self.alpha = 0.99
         self.z_file = z_file
         self.namelist = namelist
 
@@ -29,32 +29,33 @@ class TwitchDataset(Dataset):
         try:
             image_data = self.z_file.read(filename)
         except Exception as e:
-            logger.debug(f'Error loading image {filename}: {e}')
+            log.debug(f'Error loading image {filename}: {e}')
             return None
 
         try:
             image = Image.open(io.BytesIO(image_data))
-            image = image.convert('RGB')
+            image = image.convert('RGBA')
             tensor = image_to_tensor(image)
             if tensor.shape != (3, 28, 28):
-                logger.debug(f'Image {filename} has dimensions {tensor.shape}')
+                log.debug(f'Image {filename} has dimensions {tensor.shape}')
                 return None
-            steps = np.random.randint(self.max_steps)
+            steps = weighted_timestep(self.max_ts)
             img_out = noise_img(tensor, steps, self.alpha)
             img_in = noise_img(img_out, 1, self.alpha)
             return (torch.tensor(steps), img_in, img_out)
         except Exception as e:
-            logger.debug(f'Error parsing image {filename}: {e}')
+            log.debug(f'Error parsing image {filename}: {e}')
             return None
 
 class TwitchData():
     def __init__(self, path='loaders/data/twitch_archive.zip',
-                 batch_size=128, shuffle=True, num_workers=8):
+                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.num_workers = num_workers
         self.z_file = zipfile.ZipFile(path, 'r')
         self.full_namelist = self.z_file.namelist()
+        self.max_ts = max_ts
 
     def dataloaders(self):
         namelists = {}
@@ -73,10 +74,10 @@ class TwitchData():
             return default_collate(batch)
 
         for split, namelist in namelists.items():
-            dataset = TwitchDataset(self.z_file, namelist)
+            dataset = TwitchDataset(self.z_file, namelist, max_ts=self.max_ts)
             dataloaders[split] = DataLoader(
                 dataset, batch_size=self.batch_size, shuffle=self.shuffle,
-                num_workers=self.num_workers, collate_fn=collate_fn,
+                num_workers=self.num_workers, collate_fn=collate_fn
             )
 
         return dataloaders
