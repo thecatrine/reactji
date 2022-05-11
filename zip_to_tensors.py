@@ -11,6 +11,8 @@ from loaders import datasets
 from models import diffuser
 from loaders import loader_utils
 import random
+
+import tarfile
 import zipfile
 import os
 import sys
@@ -36,10 +38,9 @@ def render_batch(*args):
     plt.savefig("batch.png", dpi=1000)
 
 
+file = tarfile.open("loaders/data/small/valid_32x32.tar", "r")
 
-data = datasets.TwitchData(batch_size=128)
-
-z_file = data.z_file
+import pdb; pdb.set_trace()
 
 namelist = z_file.namelist()
 tensors = []

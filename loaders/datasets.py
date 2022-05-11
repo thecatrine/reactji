@@ -47,6 +47,32 @@ class TwitchDataset(Dataset):
             log.debug(f'Error parsing image {filename}: {e}')
             return None
 
+class ImagenetDataset(Dataset):
+    def __init__(self, tensors, max_ts=1000, alpha=0.99):
+        super().__init__()
+        self.max_ts = max_ts
+        self.alpha = 0.99
+        self.tensors = tensors
+
+    def __len__(self):
+        return len(self.tensors)
+
+    def __getitem__(self, idx):
+        assert idx < len(self.tensors)
+
+        try:
+            tensor = self.tensors[idx]
+            if tensor.shape != (3, 28, 28):
+                log.debug(f'Image has dimensions {tensor.shape}')
+                return None
+            steps = weighted_timestep(self.max_ts)
+            img_out = noise_img(tensor, steps, self.alpha)
+            img_in = noise_img(img_out, 1, self.alpha)
+            return (torch.tensor(steps), img_in, img_out)
+        except Exception as e:
+            log.debug(f'Error parsing image: {e}')
+            return None
+
 class TwitchData():
     def __init__(self, path='loaders/data/twitch_archive.zip',
                  batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
@@ -87,3 +113,42 @@ class TwitchData():
 
     def __exit__(self):
         self.z_file.close()
+
+class ImagenetData():
+    def __init__(self, path='loaders/data/small',
+                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.num_workers = num_workers
+        self.max_ts = max_ts
+        self.path = path
+
+    def dataloaders(self):
+        namelists = {}
+        dataloaders = {}
+
+        train_tensors = torch.load(self.path+"/train_32x32.pt")
+        test_tensors = torch.load(self.path+"/valid_32x32.pt")
+
+        tensors = {
+            "train": train_tensors,
+            "val": test_tensors[:10000],
+            "test": test_tensors[10000:],
+        }
+
+        for split, tens in tensors.items():
+            dataset = ImagenetDataset(tens, max_ts=self.max_ts)
+            dataloaders[split] = DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=self.shuffle,
+                num_workers=self.num_workers,
+            )
+
+        return dataloaders
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self):
+        pass

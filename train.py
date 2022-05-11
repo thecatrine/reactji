@@ -31,7 +31,7 @@ args = p.parse_args()
 
 # Data
 log.info('Loading twitch dataset...')
-data = datasets.TwitchData(batch_size=BATCH_SZ)
+data = datasets.ImagenetData(batch_size=BATCH_SZ)
 
 # Model
 log.info('Constructing model...')
