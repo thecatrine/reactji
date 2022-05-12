@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
 
 from . import utils
+
+log = logging.getLogger(__name__)
 
 OUT_CHANNELS = 16
 
@@ -64,7 +67,7 @@ class Attention(nn.Module):
         self.channels = channels
         self.num_head_channels = num_head_channels
 
-        print(channels, num_head_channels)
+        log.debug(channels, num_head_channels)
         assert channels % num_head_channels == 0
         self.num_heads = channels // num_head_channels
 
@@ -125,11 +128,11 @@ class Diffuser(torch.nn.Module):
             nn.SiLU(),
             nn.Linear(self.timestamp_channels, self.timestamp_channels),
         )
-        print("Timestamps ", self.channels, self.timestamp_channels)
+        log.debug("Timestamps ", self.channels, self.timestamp_channels)
 
         # Initial convolution layer to higher channels
         self.in_layer = nn.Conv2d(3, channels, 3, padding=1)
-        print("Convolution ", 3, channels)
+        log.debug("Convolution ", 3, channels)
 
         # Do layers on the way down
         # (Res -> Attn) -> Downsample
@@ -142,22 +145,22 @@ class Diffuser(torch.nn.Module):
                 sub_layers = []
 
                 sub_layers.append(Residual(cur_channels, channels_out, timestamp_channels, dropout_rate, normalization_groups))
-                print("Adding residual ", cur_channels, channels_out)
+                log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
                 sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
-                print("Adding Attention ", cur_channels, channels_out)
+                log.debug("Adding Attention ", cur_channels, channels_out)
 
                 self.skip_sizes.append(cur_channels)
                 self.down_layers.append(utils.TimestepEmbedSequential(*sub_layers))
-            print("---")
+            log.debug("---")
             # We downsample except right before the middle layers
             if not is_last_block:
                 self.skip_sizes.append(cur_channels)
                 self.down_layers.append(
                     utils.TimestepEmbedSequential(nn.AvgPool2d(kernel_size=2, stride=2))
                 )
-                print("<< Downsample ", cur_channels, channels_out)
+                log.debug("<< Downsample ", cur_channels, channels_out)
 
         # Middle layers
         self.middle_layer = utils.TimestepEmbedSequential(
@@ -166,9 +169,9 @@ class Diffuser(torch.nn.Module):
             Residual(cur_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
         )
 
-        print("---")
-        print("Middle layer ", cur_channels, cur_channels)
-        print("---")
+        log.debug("---")
+        log.debug("Middle layer ", cur_channels, cur_channels)
+        log.debug("---")
         # Do layers on the way up
         # (Res -> Attn) -> Res -> Attn -> Upsample
         for i, channel_multiple in reversed(list(enumerate(self.channel_multiple_schedule))):
@@ -178,26 +181,26 @@ class Diffuser(torch.nn.Module):
             # We need extra channels here because we add in skip connections
             for j in range(num_residuals):
                 skip_channels = cur_channels + self.skip_sizes.pop()
-                print ("         Skip size was: ", skip_channels)
+                log.debug ("         Skip size was: ", skip_channels)
                 sub_layers = []
                 sub_layers.append(Residual(skip_channels, channels_out, timestamp_channels, dropout_rate, normalization_groups))
-                print("Adding residual ", cur_channels, channels_out)
+                log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
                 sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
-                print("Adding Attention ", cur_channels, channels_out)
+                log.debug("Adding Attention ", cur_channels, channels_out)
                 self.up_layers.append(utils.TimestepEmbedSequential(*sub_layers))
 
             if not is_last_block:
                 skip_channels = cur_channels + self.skip_sizes.pop()
-                print ("Skip size was: ", skip_channels)
+                log.debug ("Skip size was: ", skip_channels)
                 # We need extra channels here because we add in skip connections
                 self.up_layers.append(utils.TimestepEmbedSequential(
                      Residual(skip_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
                      Attention(cur_channels, normalization_groups, num_head_channels),
                      utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'),
                 ))
-                print(">> Adding Upsample ", cur_channels, cur_channels)
+                log.debug(">> Adding Upsample ", cur_channels, cur_channels)
 
         self.out_layer = nn.Sequential(
             nn.GroupNorm(normalization_groups, cur_channels),
@@ -218,7 +221,7 @@ class Diffuser(torch.nn.Module):
         # Do input layer
         batch = self.in_layer(orig_batch)
 
-        #print(batch)
+        #log.debug(batch)
         # Do downsamplings
         for layer in self.down_layers:
             batch = layer(batch, embedded_timesteps)
