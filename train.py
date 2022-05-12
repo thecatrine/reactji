@@ -107,25 +107,21 @@ def train_one_epoch(train_data):
     start_time = time.time()
     processed = 0
     for i, batches in enumerate(train_data):
-        print('a', torch.cuda.memory_reserved(0))
         timesteps, inputs, expected_outputs = [
             x.to(device) for x in batches
         ]
-        print('b', torch.cuda.memory_reserved(0))
         if inputs.shape[0] < BATCH_SZ/2:
             log.warning('SKIPPING SMALL BATCH')
             continue
         processed += inputs.shape[0]
 
         optimizer.zero_grad()
+        if True:
         with torch.cuda.amp.autocast():
             outputs = model(inputs, timesteps)
-            print('c', torch.cuda.memory_reserved(0))
-            print('c', torch.cuda.memory_allocated(0))
+            print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
-            print('d', torch.cuda.memory_reserved(0))
             true_loss = loss_fn(outputs, expected_outputs)
-            print('e', torch.cuda.memory_reserved(0))
 
         loss = true_loss / id_loss
         with torch.no_grad():
