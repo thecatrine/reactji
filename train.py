@@ -116,7 +116,6 @@ def train_one_epoch(train_data):
         processed += inputs.shape[0]
 
         optimizer.zero_grad()
-        if True:
         with torch.cuda.amp.autocast():
             outputs = model(inputs, timesteps)
             print('space', torch.cuda.memory_allocated(0))
