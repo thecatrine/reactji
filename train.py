@@ -39,7 +39,7 @@ def save_all(path):
         'best_test_loss': best_test_loss,
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
-    }, f)
+    }, path)
 
 def load_all(path):
     global epoch, best_test_loss, model, optimizer
@@ -180,8 +180,8 @@ while epoch < EPOCHS:
     log.info(f'Epoch {epoch:03} | Test | {test_loss:.10f}')
     writer.add_scalar('test_loss_scaled', test_loss)
 
+    epoch += 1
     if test_loss < best_test_loss:
         best_test_loss = test_loss
         save_all(f"best_model_{epoch}.pth")
     save_all(f"cur_model.pth")
-    epoch += 1
