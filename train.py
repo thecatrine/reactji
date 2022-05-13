@@ -34,12 +34,12 @@ epoch = 0
 best_test_loss = 10e10
 
 def save_all(path):
-    torch.save(path, {
+    torch.save({
         'epoch': epoch,
         'best_test_loss': best_test_loss,
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
-    })
+    }, f)
 
 def load_all(path):
     global epoch, best_test_loss, model, optimizer
@@ -120,7 +120,7 @@ def train_one_epoch(train_data):
         optimizer.zero_grad()
         with torch.cuda.amp.autocast():
             outputs = model(inputs, timesteps)
-            print('space', torch.cuda.memory_allocated(0))
+            # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
             true_loss = loss_fn(outputs, expected_outputs)
 
@@ -140,7 +140,7 @@ def train_one_epoch(train_data):
         # TODO: Are these numbers good?
         torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
         if grad_norm > 5 or grad_max > 1:
-            log.warning(f'HIGH GRADIENT (post-clip: {gradient_norm()})')
+            log.warning(f'HIGH GRADIENT {grad_norm} {grad_max} (post-clip: {gradient_norm()})')
         scaler.step(optimizer)
         scaler.update()
 
