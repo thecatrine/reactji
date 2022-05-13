@@ -54,7 +54,7 @@ def load_all(path):
     epoch = loaded['epoch']
     best_test_loss = loaded['best_test_loss']
     model.load_state_dict(loaded['model'])
-    optimizer.load_state_dict(loaded['model'])
+    optimizer.load_state_dict(loaded['optimizer'])
 
 # Data
 log.info('Loading twitch dataset...')
@@ -66,11 +66,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 log.info(f"Device: {device}")
 model = diffuser.Diffuser(dropout_rate=0.1)
 # model = model.to(torch.float16)
-if args.resume:
-    log.info("Resuming from {}...".format(args.resume))
-    load_all(args.resume)
-else:
-    log.info('Initializing...')
 log.info('Sending model to device...')
 model = model.to(device)
 old_loss_fn = torch.nn.MSELoss()
@@ -78,6 +73,13 @@ old_id_loss = 3e-3
 loss_fn = torch.nn.L1Loss()
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
+
+if args.resume:
+    log.info("Resuming from {}...".format(args.resume))
+    load_all(args.resume)
+else:
+    log.info('Initializing...')
+
 scaler = torch.cuda.amp.GradScaler()
 print(torch.cuda.get_device_properties(0).total_memory)
 print(torch.cuda.memory_reserved(0))
