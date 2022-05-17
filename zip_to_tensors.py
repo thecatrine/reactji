@@ -72,4 +72,7 @@ all_tensors = torch.cat(tensors, dim=0)
 print("Final tensor dimensions:", all_tensors.shape)
 print("Wrong shape:", wrong_shape, "out of", len(namelist))
 print("Errors:", errors, "out of", len(namelist))
+
+valid_tensors = all_tensors[:10000]
+test_tensh
 all_tensors.save('all_tensors.pt')
