@@ -153,3 +153,44 @@ class ImagenetData():
 
     def __exit__(self):
         pass
+
+
+class NewTwitchDataset(Dataset):
+    def __init__(self, path='loaders/data/twitch',
+                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.num_workers = num_workers
+        self.max_ts = max_ts
+        self.path = path
+
+    def dataloaders(self):
+        namelists = {}
+        dataloaders = {}
+
+        train_tensors = torch.load(self.path+"/train.pt")
+        test_tensors = torch.load(self.path+"/test.pt")
+        val_tensors = torch.load(self.path+"/val.pt")
+
+        tensors = {
+            "train": train_tensors,
+            "val": val_tensors,
+            "test": test_tensors,
+        }
+
+        for split, tens in tensors.items():
+            dataset = ImagenetDataset(tens, max_ts=self.max_ts)
+            dataloaders[split] = DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=self.shuffle,
+                num_workers=self.num_workers,
+            )
+
+        return dataloaders
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self):
+        pass

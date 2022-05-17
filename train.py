@@ -17,7 +17,7 @@ LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
 log = logging.getLogger(__name__)
 
-LR = float(os.environ.get('LR', '1e-4'))
+LR = float(os.environ.get('LR', '3e-5'))
 log.info(f'Using LR={LR}')
 BATCH_SZ = int(os.environ.get('BATCH_SZ', '256'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
@@ -58,7 +58,7 @@ def load_all(path):
 
 # Data
 log.info('Loading twitch dataset...')
-data = datasets.ImagenetData(batch_size=BATCH_SZ)
+data = datasets.NewTwitchDataset(batch_size=BATCH_SZ)
 
 # Model
 log.info('Constructing model...')
@@ -99,7 +99,7 @@ def max_gradient():
     parameters = [p for p in model.parameters() if p.grad is not None]
     return torch.max(torch.stack([torch.max(p.grad.detach()) for p in parameters]))
 
-def train_one_epoch(train_data):
+def train_one_epoch;(train_data):
     model.train(True)
     running_loss = 0.
     running_old_loss = 0.
