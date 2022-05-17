@@ -46,7 +46,9 @@ def render_batch(*args):
 print("Loading models")
 
 model = diffuser.Diffuser(dropout_rate=0.1)
-model.load_state_dict(torch.load(args.model))
+foo = torch.load(args.model)
+print(foo)
+model.load_state_dict(foo)
 model.eval()
 
 #
