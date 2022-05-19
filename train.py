@@ -22,6 +22,15 @@ log.info(f'Using LR={LR}')
 BATCH_SZ = int(os.environ.get('BATCH_SZ', '256'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
 
+PRECISION = os.environ.get('PRECISION', 'AUTO')
+assert PRECISION in ['AUTO', '32']
+USE_AUTOCAST = (PRECISION != '32')
+log.info(f'Using PRECISION={PRECISION}')
+
+RUN_NAME = os.environ.get('RUN_NAME', '')
+assert RUN_NAME != ''
+log.info(f'Using RUN_NAME={RUN_NAME}')
+
 random.seed(0)
 np.random.seed(0)
 
@@ -33,16 +42,26 @@ EPOCHS = 10000
 epoch = 0
 best_test_loss = 10e10
 
-def save_all(path):
+prefix_path = f'run_{RUN_NAME}'
+tensorboard_path = f'runs/{prefix_path}'
+if not os.path.exists(prefix_path):
+    os.mkdir(prefix_path)
+if not os.path.exists(tensorboard_path):
+    os.mkdir(tensorboard_path)
+
+def save_all(_path):
+    path = f'{prefix_path}/{_path}'
+    global epoch, best_test_loss, model, optimizer, lr_scheduler
     torch.save({
         'epoch': epoch,
         'best_test_loss': best_test_loss,
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
+        'lr_scheduler': lr_scheduler.state_dict(),
     }, path)
 
 def load_all(path):
-    global epoch, best_test_loss, model, optimizer
+    global epoch, best_test_loss, model, optimizer, lr_scheduler
     loaded = torch.load(path)
     if not isinstance(loaded, dict) or 'model' not in loaded:
         loaded = {
@@ -50,11 +69,13 @@ def load_all(path):
             'best_test_loss': 10e10,
             'model': loaded,
             'optimizer': optimizer.state_dict(),
+            'lr_scheduler': lr_scheduler.state_dict(),
         }
     epoch = loaded['epoch']
     best_test_loss = loaded['best_test_loss']
     model.load_state_dict(loaded['model'])
     optimizer.load_state_dict(loaded['optimizer'])
+    lr_scheduler.load_state_dict(loaded['lr_scheduler'])
 
 # Data
 log.info('Loading twitch dataset...')
@@ -73,6 +94,13 @@ old_id_loss = 3e-3
 loss_fn = torch.nn.L1Loss()
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
+lr_scheduler = torch.optim.lr_scheduler.LinearLR(
+    optimizer,
+    start_factor=1e-10,
+    end_factor=1.0,
+    total_iters=9000,
+)
+
 
 if args.resume:
     log.info("Resuming from {}...".format(args.resume))
@@ -88,7 +116,7 @@ print(sum(x.numel() for x in model.parameters()))
 
 # Tensorboard
 log.info('Configuring tensorboard...')
-writer = SummaryWriter()
+writer = SummaryWriter(log_dir=tensorboard_path)
 
 def gradient_norm():
     parameters = [p for p in model.parameters() if p.grad is not None]
@@ -99,7 +127,7 @@ def max_gradient():
     parameters = [p for p in model.parameters() if p.grad is not None]
     return torch.max(torch.stack([torch.max(p.grad.detach()) for p in parameters]))
 
-def train_one_epoch;(train_data):
+def train_one_epoch(train_data):
     model.train(True)
     running_loss = 0.
     running_old_loss = 0.
@@ -118,7 +146,7 @@ def train_one_epoch;(train_data):
         processed += inputs.shape[0]
 
         optimizer.zero_grad()
-        with torch.cuda.amp.autocast():
+        with torch.cuda.amp.autocast(enabled=USE_AUTOCAST):
             outputs = model(inputs, timesteps)
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
@@ -132,8 +160,12 @@ def train_one_epoch;(train_data):
         running_loss = scale*running_loss + (1-scale)*loss.item()
         running_old_loss = scale*running_old_loss + (1-scale)*old_loss.item()
 
-        scaler.scale(true_loss).backward()
-        scaler.unscale_(optimizer)
+        if USE_AUTOCAST:
+            scaler.scale(true_loss).backward()
+            scaler.unscale_(optimizer)
+        else:
+            true_loss.backward()
+
         grad_norm = gradient_norm()
         grad_max = max_gradient()
         # log.info(f'gradient norm: {grad_norm:.3f} max: {grad_max:.3f} loss: {true_loss}')
@@ -141,15 +173,23 @@ def train_one_epoch;(train_data):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
         if grad_norm > 5 or grad_max > 1:
             log.warning(f'HIGH GRADIENT {grad_norm} {grad_max} (post-clip: {gradient_norm()})')
-        scaler.step(optimizer)
-        scaler.update()
+
+        if USE_AUTOCAST:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
+
+        last_lr = lr_scheduler.get_last_lr()[0]
+        lr_scheduler.step()
 
         cur_step = (epoch*len(train_data) + i)*BATCH_SZ
 
+        writer.add_scalar('lr', last_lr)
         writer.add_scalar('train_loss_scaled', loss, cur_step)
         writer.add_scalar('train_old_loss_scaled', old_loss, cur_step)
         if (i+1)%20 == 0:
-            log.info(f'E/{epoch:03} B/{i+1:06} | L {running_loss:.6f} | Old L {running_old_loss:.6f} | ex/s {processed / (time.time() - start_time):03.0f}')
+            log.info(f'E/{epoch:03} B/{i+1:06} | L {running_loss:.6f} | Old L {running_old_loss:.6f} | ex/s {processed / (time.time() - start_time):03.0f} | lr {last_lr:0.3g}')
 
 def scaled_test_loss(test_data):
     model.train(False)
