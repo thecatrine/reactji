@@ -59,6 +59,9 @@ class Residual(utils.TimestepBlock):
 
         resid = self.residual_connection(orig_batch)
 
+        print("resid", resid.dtype)
+        print("batch", batch.dtype)
+
         return batch + resid
 
 class Attention(nn.Module):
@@ -216,6 +219,8 @@ class Diffuser(torch.nn.Module):
 
         # Get embedded timesteps by blowing up with a linear layer
         embedded_timesteps = utils.timestep_embedding(timesteps, self.channels)
+        embedded_timesteps = embedded_timesteps.to(timesteps.dtype)
+
         embedded_timesteps = self.time_embed(embedded_timesteps)
 
         # Do input layer

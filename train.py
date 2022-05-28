@@ -23,8 +23,8 @@ BATCH_SZ = int(os.environ.get('BATCH_SZ', '256'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
 
 PRECISION = os.environ.get('PRECISION', 'AUTO')
-assert PRECISION in ['AUTO', '32']
-USE_AUTOCAST = (PRECISION != '32')
+assert PRECISION in ['AUTO', '32', '16']
+USE_AUTOCAST = (PRECISION == 'AUTO')
 log.info(f'Using PRECISION={PRECISION}')
 
 FORCE_WARMUP = os.environ.get('FORCE_WARMUP', '0')
@@ -78,8 +78,9 @@ def load_all(path):
     best_test_loss = loaded['best_test_loss']
     model.load_state_dict(loaded['model'])
     # try doing this
-    # model = model.to(torch.float16)
-    import pdb; pdb.set_trace()
+    if PRECISION == '16':
+        model = model.to(torch.float16)
+    #import pdb; pdb.set_trace()
 
     if not FORCE_WARMUP:
         optimizer.load_state_dict(loaded['optimizer'])
@@ -94,7 +95,10 @@ log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 log.info(f"Device: {device}")
 model = diffuser.Diffuser(dropout_rate=0.1)
-model = model.to(torch.float16)
+
+if PRECISION == '16':
+    model = model.to(torch.float16)
+
 log.info('Sending model to device...')
 model = model.to(device)
 old_loss_fn = torch.nn.MSELoss()
@@ -154,6 +158,9 @@ def train_one_epoch(train_data):
 
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(enabled=USE_AUTOCAST):
+            if PRECISION=='16':
+                inputs = inputs.to(torch.float16)
+                timesteps = timesteps.to(torch.float16)
             outputs = model(inputs, timesteps)
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
