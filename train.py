@@ -79,7 +79,7 @@ def load_all(path):
     model.load_state_dict(loaded['model'])
     # try doing this
     # model = model.to(torch.float16)
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
 
     if not FORCE_WARMUP:
         optimizer.load_state_dict(loaded['optimizer'])
@@ -94,7 +94,7 @@ log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 log.info(f"Device: {device}")
 model = diffuser.Diffuser(dropout_rate=0.1)
-# model = model.to(torch.float16)
+model = model.to(torch.float16)
 log.info('Sending model to device...')
 model = model.to(device)
 old_loss_fn = torch.nn.MSELoss()
