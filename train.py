@@ -27,6 +27,9 @@ assert PRECISION in ['AUTO', '32']
 USE_AUTOCAST = (PRECISION != '32')
 log.info(f'Using PRECISION={PRECISION}')
 
+FORCE_WARMUP = os.environ.get('FORCE_WARMUP', '0')
+FoRCE_WARMUP = bool(int(FORCE_WARMUP))
+
 RUN_NAME = os.environ.get('RUN_NAME', '')
 assert RUN_NAME != ''
 log.info(f'Using RUN_NAME={RUN_NAME}')
@@ -74,8 +77,13 @@ def load_all(path):
     epoch = loaded['epoch']
     best_test_loss = loaded['best_test_loss']
     model.load_state_dict(loaded['model'])
-    optimizer.load_state_dict(loaded['optimizer'])
-    lr_scheduler.load_state_dict(loaded['lr_scheduler'])
+    # try doing this
+    # model = model.to(torch.float16)
+    # import pdb; pdb.set_trace()
+
+    if not FORCE_WARMUP:
+        optimizer.load_state_dict(loaded['optimizer'])
+        lr_scheduler.load_state_dict(loaded['lr_scheduler'])
 
 # Data
 log.info('Loading twitch dataset...')
@@ -96,11 +104,10 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
 lr_scheduler = torch.optim.lr_scheduler.LinearLR(
     optimizer,
-    start_factor=1e-10,
+    start_factor=1e-6,
     end_factor=1.0,
     total_iters=9000,
 )
-
 
 if args.resume:
     log.info("Resuming from {}...".format(args.resume))
