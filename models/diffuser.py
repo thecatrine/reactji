@@ -59,9 +59,6 @@ class Residual(utils.TimestepBlock):
 
         resid = self.residual_connection(orig_batch)
 
-        print("resid", resid.dtype)
-        print("batch", batch.dtype)
-
         return batch + resid
 
 class Attention(nn.Module):

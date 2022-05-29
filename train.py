@@ -158,7 +158,7 @@ def train_one_epoch(train_data):
 
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(enabled=USE_AUTOCAST):
-            if PRECISION=='16':
+            if PRECISION != '32':
                 inputs = inputs.to(torch.float16)
                 timesteps = timesteps.to(torch.float16)
             outputs = model(inputs, timesteps)
