@@ -212,6 +212,7 @@ def scaled_test_loss(test_data):
         test_len = 0
         for vdata in test_data:
             s, vinputs, vlabels = vdata
+            s = s.to(torch.float32)
             s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
             voutputs = model(vinputs, s)
             id_loss = loss_fn(vinputs, vlabels)
