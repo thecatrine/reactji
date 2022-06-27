@@ -157,18 +157,21 @@ class ImagenetData():
 
 class NewTwitchDataset(Dataset):
     def __init__(self, path='loaders/data/twitch',
-                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000):
+                 batch_size=128, shuffle=True, num_workers=8, max_ts=1000, manual_shuffle=False):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.num_workers = num_workers
         self.max_ts = max_ts
         self.path = path
+        self.manual_shuffle = manual_shuffle
 
     def dataloaders(self):
         namelists = {}
         dataloaders = {}
 
         train_tensors = torch.load(self.path+"/train.pt")
+        if self.manual_shuffle:
+            train_tensors = train_tensors[torch.randperm(train_tensors.shape[0])]
         test_tensors = torch.load(self.path+"/test.pt")
         val_tensors = torch.load(self.path+"/val.pt")
 

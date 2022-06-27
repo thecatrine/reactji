@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 
-# KILL=1 bash run_remote.sh 'cd reactji; pip install -r requirements.txt; LOGLEVEL=INFO PRECISION=32 RUN_NAME=L1_FULL_PRECISION_WARMUP LR=3e-5 BATCH_SZ=128 python train.py'
+# KILL=1 bash run_remote.sh 'cd reactji; pip install -r old_requirements.txt; LOGLEVEL=INFO PRECISION=32 RUN_NAME=L1_FULL_PRECISION_WARMUP LR=3e-5 BATCH_SZ=128 python train.py'
 REMOTE_IP=${REMOTE_IP:-104.171.200.163}
 
 rsync -avz --exclude '*.pth' ./ ubuntu@$REMOTE_IP:~/reactji/

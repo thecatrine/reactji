@@ -1,6 +1,6 @@
 from loaders import datasets
 from models import diffuser
-from models import diffuser
+from models import glide_model
 from torch.utils.tensorboard import SummaryWriter
 import logging
 import argparse
@@ -28,7 +28,12 @@ USE_AUTOCAST = (PRECISION == 'AUTO')
 log.info(f'Using PRECISION={PRECISION}')
 
 FORCE_WARMUP = os.environ.get('FORCE_WARMUP', '0')
-FoRCE_WARMUP = bool(int(FORCE_WARMUP))
+FORCE_WARMUP = bool(int(FORCE_WARMUP))
+log.info(f'Using FORCE_WARMUP={FORCE_WARMUP}')
+
+MANUAL_SHUFFLE = os.environ.get('MANUAL_SHUFFLE', '0')
+MANUAL_SHUFFLE = bool(int(MANUAL_SHUFFLE))
+log.info(f'Using MANUAL_SHUFFLE={MANUAL_SHUFFLE}')
 
 RUN_NAME = os.environ.get('RUN_NAME', '')
 assert RUN_NAME != ''
@@ -39,6 +44,8 @@ np.random.seed(0)
 
 p = argparse.ArgumentParser()
 p.add_argument('--resume', default="")
+
+p.add_argument('--glide', action='store_true')
 args = p.parse_args()
 
 EPOCHS = 10000
@@ -88,13 +95,18 @@ def load_all(path):
 
 # Data
 log.info('Loading twitch dataset...')
-data = datasets.NewTwitchDataset(batch_size=BATCH_SZ)
+data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
 
 # Model
 log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 log.info(f"Device: {device}")
-model = diffuser.Diffuser(dropout_rate=0.1)
+
+if args.glide:
+    log.info("Using model from glide repo")
+    model = glide_model.create_model()
+else:
+    model = diffuser.Diffuser(dropout_rate=0.1)
 
 if PRECISION == '16':
     model = model.to(torch.float16)
@@ -103,7 +115,7 @@ log.info('Sending model to device...')
 model = model.to(device)
 old_loss_fn = torch.nn.MSELoss()
 old_id_loss = 3e-3
-loss_fn = torch.nn.L1Loss()
+loss_fn = torch.nn.MSELoss()
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
 lr_scheduler = torch.optim.lr_scheduler.LinearLR(
