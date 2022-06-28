@@ -4,8 +4,8 @@ import torch
 import math
 from . import whiten
 
-def noise_img(img, n=1, alpha=0.99):
-    return torch.normal(np.sqrt(alpha**n)*img, (1-alpha**n))
+def noise_img(img, n=1, alpha=0.9999):
+    return torch.normal(np.sqrt(alpha**n)*img, np.sqrt(1-alpha**n))
 
 def weighted_timestep(max_ts=1000):
     return math.floor((np.random.random() * max_ts**0.5)**2)
