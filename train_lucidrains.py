@@ -68,7 +68,7 @@ log.info('Loading twitch dataset...')
 data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=True)
 
 log.info('Training...')
-decoder_trainer.load('chk_lucidrains.pth')
+# decoder_trainer.load('chk_lucidrains.pth')
 while epoch < EPOCHS:
     dataloaders = data.dataloaders()
     train_data = dataloaders['train']
@@ -87,6 +87,6 @@ while epoch < EPOCHS:
         if (chunk_start // chunk_sz) % 1000 == 0:
             log.info('Saving...')
             decoder_trainer.save('chk_lucidrains.pth')
-            log.info('Saving test images...')
-            images = decoder_trainer.sample(batch_size=8, max_batch_size=8)
-            torch.save(images, 'lucidrains_images.pt')
+            # log.info('Saving test images...')
+            # images = decoder_trainer.sample(batch_size=8, max_batch_size=8)
+            # torch.save(images, 'lucidrains_images.pt')
