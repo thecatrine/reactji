@@ -24,6 +24,22 @@ log = logging.getLogger(__name__)
 BATCH_SZ = int(os.environ.get('BATCH_SZ', '128'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
 
+RUN_NAME = os.environ.get('RUN_NAME', '')
+assert RUN_NAME != ''
+log.info(f'Using RUN_NAME={RUN_NAME}')
+
+prefix_path = f'run_{RUN_NAME}'
+tensorboard_path = f'runs/{prefix_path}'
+if not os.path.exists(prefix_path):
+    os.mkdir(prefix_path)
+if not os.path.exists(tensorboard_path):
+    os.mkdir(tensorboard_path)
+
+# Tensorboard
+log.info('Configuring tensorboard...')
+writer = SummaryWriter(log_dir=tensorboard_path)
+
+
 
 EPOCHS = 10000
 epoch = 0
@@ -31,10 +47,12 @@ best_test_loss = 10e10
 
 
 log.info('Constructing unet...')
-unet = Unet(
-    dim=128,
-    dim_mults=(1, 2, 3),
-).cuda()
+# unet = Unet(
+#     dim=128,
+#     dim_mults=(1, 2, 3),
+# ).cuda()
+
+unet = diffuser.Diffuser().cuda()
 
 decoder = Decoder(
     unet=unet,
@@ -57,12 +75,18 @@ while epoch < EPOCHS:
     test_data = dataloaders['test']
 
     tensors = train_data.dataset.tensors.cuda()
-    chunk_sz = BATCH_SZ*1024
+    chunk_sz = BATCH_SZ
     for chunk_start in range(0, len(tensors), chunk_sz):
         loss = decoder_trainer(tensors[chunk_start:chunk_start+chunk_sz],
                                max_batch_size=BATCH_SZ)
+        decoder_trainer.update()
         log.info(f'Train Loss: {loss}')
+        writer.add_scalar('train_loss_lucidrains', loss,
+                          chunk_start + epoch * len(tensors))
 
-        if True: #(chunk_start // chunk_sz) % 10 == 0:
+        if (chunk_start // chunk_sz) % 1000 == 0:
             log.info('Saving...')
             decoder_trainer.save('chk_lucidrains.pth')
+            log.info('Saving test images...')
+            images = decoder_trainer.sample(batch_size=8, max_batch_size=8)
+            torch.save(images, 'lucidrains_images.pt')

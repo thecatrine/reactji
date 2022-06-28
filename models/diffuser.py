@@ -100,7 +100,7 @@ class Attention(nn.Module):
         return batch.reshape(orig_batch.shape) + orig_batch
 
 class Diffuser(torch.nn.Module):
-    def __init__(self, dropout_rate, normalization_groups=32, channels=192, num_head_channels=64, num_residuals=3):
+    def __init__(self, dropout_rate=0.1, normalization_groups=32, channels=192, num_head_channels=64, num_residuals=3):
         super(Diffuser, self).__init__()
         # input is b x 3 x 28 x 28
         self.time_embed = None
@@ -210,11 +210,15 @@ class Diffuser(torch.nn.Module):
             ),
         )
 
+    def forward_with_cond_scale(self, *a, **kw):
+        return self.forward(*a, **kw)
 
-    def forward(self, orig_batch, timesteps):
+    def forward(self, orig_batch, timesteps, *a, **kw):
         skip_connections = []
 
         # Get embedded timesteps by blowing up with a linear layer
+        if timesteps.dtype == torch.long:
+            timesteps = timesteps.to(torch.float32)
         embedded_timesteps = utils.timestep_embedding(timesteps, self.channels)
         embedded_timesteps = embedded_timesteps.to(timesteps.dtype)
 
