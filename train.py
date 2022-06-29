@@ -61,6 +61,7 @@ if not os.path.exists(tensorboard_path):
 
 def save_all(_path):
     path = f'{prefix_path}/{_path}'
+    log.info(f'Saving to {path}...')
     global epoch, best_test_loss, model, optimizer, lr_scheduler
     torch.save({
         'epoch': epoch,
@@ -120,7 +121,8 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
 lr_scheduler = torch.optim.lr_scheduler.LinearLR(
     optimizer,
-    start_factor=1e-6,
+    # RSI: 1e-6
+    start_factor=1.0,
     end_factor=1.0,
     total_iters=9000,
 )
@@ -216,6 +218,9 @@ def train_one_epoch(train_data):
         writer.add_scalar('train_old_loss_scaled', old_loss, cur_step)
         if (i+1)%20 == 0:
             log.info(f'E/{epoch:03} B/{i+1:06} | L {running_loss:.6f} | Old L {running_old_loss:.6f} | ex/s {processed / (time.time() - start_time):03.0f} | lr {last_lr:0.3g}')
+            log.info(f'      {true_loss}')
+        if (i+1)%1000 == 0:
+            save_all(f"cur_model.pth")
 
 def scaled_test_loss(test_data):
     model.train(False)

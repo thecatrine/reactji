@@ -39,9 +39,9 @@ class TwitchDataset(Dataset):
             if tensor.shape != (3, 28, 28):
                 log.debug(f'Image {filename} has dimensions {tensor.shape}')
                 return None
-            steps = weighted_timestep(self.max_ts)
-            img_out = noise_img(tensor, steps, self.alpha)
-            img_in = noise_img(img_out, 1, self.alpha)
+            steps = weighted_timestep(self.max_ts-1)+1
+            img_in = noise_img(tensor, steps)
+            img_out = tensor
             return (torch.tensor(steps), img_in, img_out)
         except Exception as e:
             log.debug(f'Error parsing image {filename}: {e}')
@@ -65,9 +65,9 @@ class ImagenetDataset(Dataset):
             if tensor.shape != (3, 28, 28):
                 log.debug(f'Image has dimensions {tensor.shape}')
                 return None
-            steps = weighted_timestep(self.max_ts)
-            img_out = noise_img(tensor, steps, self.alpha)
-            img_in = noise_img(img_out, 1, self.alpha)
+            steps = weighted_timestep(self.max_ts-1)+1
+            img_in = noise_img(tensor, steps)
+            img_out = tensor
             return (torch.tensor(steps), img_in, img_out)
         except Exception as e:
             log.debug(f'Error parsing image: {e}')

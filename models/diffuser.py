@@ -212,6 +212,8 @@ class Diffuser(torch.nn.Module):
 
 
     def forward(self, orig_batch, timesteps):
+        if timesteps.dtype == torch.long:
+            timesteps = timesteps.to(torch.float32)
         skip_connections = []
 
         # Get embedded timesteps by blowing up with a linear layer

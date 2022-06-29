@@ -4,11 +4,28 @@ import torch
 import math
 from . import whiten
 
-def noise_img(img, n=1, alpha=0.9999):
-    return torch.normal(np.sqrt(alpha**n)*img, np.sqrt(1-alpha**n))
+MAX_TS = 1000
+MIN_BETA=0.0001
+MAX_BETA=0.02
+BETAS = []
+for i in range(MAX_TS):
+    BETAS.append(MIN_BETA + (i/MAX_TS)*(MAX_BETA-MIN_BETA))
+BETAS = torch.tensor(BETAS)
+ALPHAS = 1-BETAS
+acc = 1
+ALPHAS_CUMPROD = [acc]
+for i in range(len(ALPHAS)):
+    acc *= ALPHAS[i]
+    ALPHAS_CUMPROD.append(acc)
+ALPHAS_CUMPROD = torch.tensor(ALPHAS_CUMPROD)
+print(ALPHAS)
+print(ALPHAS_CUMPROD)
+
+def noise_img(img, n=1):
+    return torch.normal(np.sqrt(ALPHAS_CUMPROD[n])*img, np.sqrt(1-ALPHAS_CUMPROD[n]))
 
 def weighted_timestep(max_ts=1000):
-    return math.floor((np.random.random() * max_ts**0.5)**2)
+    return math.floor(np.random.random() * max_ts)
 
 SCALE = 10
 whitener = whiten.Whitener()
