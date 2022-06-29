@@ -12,17 +12,13 @@ for i in range(MAX_TS):
     BETAS.append(MIN_BETA + (i/MAX_TS)*(MAX_BETA-MIN_BETA))
 BETAS = torch.tensor(BETAS)
 ALPHAS = 1-BETAS
-acc = 1
-ALPHAS_CUMPROD = [acc]
-for i in range(len(ALPHAS)):
-    acc *= ALPHAS[i]
-    ALPHAS_CUMPROD.append(acc)
-ALPHAS_CUMPROD = torch.tensor(ALPHAS_CUMPROD)
+ALPHAS_CUMPROD = torch.cumprod(ALPHAS, dim=0)
 print(ALPHAS)
 print(ALPHAS_CUMPROD)
 
 def noise_img(img, n=1):
-    return torch.normal(np.sqrt(ALPHAS_CUMPROD[n])*img, np.sqrt(1-ALPHAS_CUMPROD[n]))
+    assert n > 0
+    return torch.normal(np.sqrt(ALPHAS_CUMPROD[n-1])*img, np.sqrt(1-ALPHAS_CUMPROD[n-1]))
 
 def weighted_timestep(max_ts=1000):
     return math.floor(np.random.random() * max_ts)
