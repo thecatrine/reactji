@@ -5,12 +5,19 @@ import torch.nn.functional as F
 import math
 from . import whiten
 
+def linear_beta_schedule(max_ts, min_beta=0.0001, max_beta=0.02):
+    return torch.linspace(min_beta, max_beta, max_ts)
+
+def cosine_beta_schedule(max_ts, s=0.008):
+    # from https://openreview.net/forum?id=-NEXDKk8gZ
+    x = torch.linspace(0, max_ts, max_ts+1)
+    alphas_cumprod = torch.cos(((x / max_ts) + s) / (1 + s) * torch.pi * 0.5) ** 2
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0, 0.999)
+
 MAX_TS = 1000
-MIN_BETA=0.0001
-MAX_BETA=0.02
-BETAS = []
-for i in range(MAX_TS):
-    BETAS.append(MIN_BETA + (i/MAX_TS)*(MAX_BETA-MIN_BETA))
+BETAS=cosine_beta_schedule(MAX_TS)
 BETAS = torch.tensor(BETAS)
 ALPHAS = 1-BETAS
 ALPHAS_CUMPROD = torch.cumprod(ALPHAS, dim=0)
