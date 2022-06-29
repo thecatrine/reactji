@@ -55,7 +55,7 @@ STAPS=args.staps
 STAP_SIZE = args.stap_size
 
 
-data = datasets.TwitchData(batch_size=128, max_ts=0)
+data = datasets.NewTwitchDataset(batch_size=128, max_ts=0)
 dataloaders = data.dataloaders()
 test_data = iter(dataloaders['test'])
 
@@ -79,7 +79,7 @@ with torch.no_grad():
     for i in range(STAPS, 0, -1):
         s = torch.Tensor([i * STAP_SIZE - 1])
         outputs = model.forward(temp, s)
-        diff = outputs - temp
+        diff = (outputs - temp) / i
         #print(diff)
         outputs = temp + diff * STAP_SIZE
         print(i, "shape: ", outputs.shape)
