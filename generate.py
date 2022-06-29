@@ -55,7 +55,7 @@ STAPS=args.staps
 STAP_SIZE = args.stap_size
 
 
-data = datasets.NewTwitchDataset(batch_size=128, max_ts=0)
+data = datasets.NewTwitchDataset(batch_size=128, max_ts=1)
 dataloaders = data.dataloaders()
 test_data = iter(dataloaders['test'])
 
@@ -66,7 +66,6 @@ for i in range(8):
         images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
     else:
         images.append(loader_utils.noise_img(outputs[i], STAPS).unsqueeze(0))
-    
 
 # Try to generate something
 
@@ -86,7 +85,7 @@ with torch.no_grad():
         if i % 10 == 1:
             all_images.append(outputs)
         temp = outputs
-    
+
     loader_utils.tensor_to_image(temp[0]).save('emoji-test.png')
 
 render_batch(*all_images)
