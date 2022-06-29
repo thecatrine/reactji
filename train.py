@@ -22,6 +22,10 @@ log.info(f'Using LR={LR}')
 BATCH_SZ = int(os.environ.get('BATCH_SZ', '256'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
 
+TRAIN_ON_NOISE = os.environ.get('TRAIN_ON_NOISE', '1')
+TRAIN_ON_NOISE = bool(int(TRAIN_ON_NOISE))
+log.info(f'Using TRAIN_ON_NOISE={TRAIN_ON_NOISE}')
+
 PRECISION = os.environ.get('PRECISION', 'AUTO')
 assert PRECISION in ['AUTO', '32', '16']
 USE_AUTOCAST = (PRECISION == 'AUTO')
@@ -165,6 +169,8 @@ def train_one_epoch(train_data):
         timesteps, inputs, expected_outputs = [
             x.to(device) for x in batches
         ]
+        if TRAIN_ON_NOISE:
+            expected_outputs = inputs - expected_outputs
         if inputs.shape[0] < BATCH_SZ/2:
             log.warning('SKIPPING SMALL BATCH')
             continue
@@ -228,12 +234,14 @@ def scaled_test_loss(test_data):
         running_vloss = 0.
         test_len = 0
         for vdata in test_data:
-            s, vinputs, vlabels = vdata
+            s, inputs, expected_outputs = vdata
+            if TRAIN_ON_NOISE:
+                expected_outputs = inputs - expected_outputs
             s = s.to(torch.float32)
-            s, vinputs, vlabels = s.to(device), vinputs.to(device), vlabels.to(device)
-            voutputs = model(vinputs, s)
-            id_loss = loss_fn(vinputs, vlabels)
-            vloss = loss_fn(voutputs, vlabels) / id_loss
+            s, inputs, expected_outputs = s.to(device), inputs.to(device), expected_outputs.to(device)
+            voutputs = model(inputs, s)
+            id_loss = loss_fn(inputs, expected_outputs)
+            vloss = loss_fn(voutputs, expected_outputs) / id_loss
             running_vloss += vloss.item()
             test_len += 1
         return running_vloss / test_len

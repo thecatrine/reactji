@@ -1,26 +1,33 @@
 import torchvision
 import numpy as np
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 import math
 from . import whiten
 
+def linear_beta_schedule(max_ts, min_beta=0.0001, max_beta=0.02):
+    return torch.linspace(min_beta, max_beta, max_ts)
+
+def cosine_beta_schedule(max_ts, s=0.008):
+    # from https://openreview.net/forum?id=-NEXDKk8gZ
+    x = torch.linspace(0, max_ts, max_ts+1)
+    alphas_cumprod = torch.cos(((x / max_ts) + s) / (1 + s) * torch.pi * 0.5) ** 2
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0, 0.999)
+
 MAX_TS = 1000
-MIN_BETA=0.0001
-MAX_BETA=0.02
-BETAS = []
-for i in range(MAX_TS):
-    BETAS.append(MIN_BETA + (i/MAX_TS)*(MAX_BETA-MIN_BETA))
+BETAS=cosine_beta_schedule(MAX_TS)
 BETAS = torch.tensor(BETAS)
 ALPHAS = 1-BETAS
 ALPHAS_CUMPROD = torch.cumprod(ALPHAS, dim=0)
 
 # THis shit is just copieed from dalle2_pytorch.py:446
 ALPHAS_CUMPROD_PREV = F.pad(ALPHAS_CUMPROD[:-1], (1, 0), value = 1.)
-POSTERIOR_MEAN_COEF1 = BETAS * torch.sqrt(ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD))
-POSTERIOR_MEAN_COEF2 = (1. - ALPHAS_CUMPROD_PREV) * torch.sqrt(ALPHAS) / (1. - ALPHAS_CUMPROD))
+POSTERIOR_MEAN_COEF1 = BETAS * torch.sqrt(ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD)
+POSTERIOR_MEAN_COEF2 = (1. - ALPHAS_CUMPROD_PREV) * torch.sqrt(ALPHAS) / (1. - ALPHAS_CUMPROD)
 POSTERIOR_VARIANCE = BETAS * (1. - ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD)
-POSTERIOR_LOG_VARIANCE = torch.log(POSTERIOR_VARIANCE.clamp(min=1e-20)))
+POSTERIOR_LOG_VARIANCE = torch.log(POSTERIOR_VARIANCE.clamp(min=1e-20))
 print(ALPHAS)
 print(ALPHAS_CUMPROD)
 
