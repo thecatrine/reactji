@@ -1,7 +1,7 @@
 import torchvision
 import numpy as np
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 import math
 from . import whiten
 
@@ -17,10 +17,10 @@ ALPHAS_CUMPROD = torch.cumprod(ALPHAS, dim=0)
 
 # THis shit is just copieed from dalle2_pytorch.py:446
 ALPHAS_CUMPROD_PREV = F.pad(ALPHAS_CUMPROD[:-1], (1, 0), value = 1.)
-POSTERIOR_MEAN_COEF1 = BETAS * torch.sqrt(ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD))
-POSTERIOR_MEAN_COEF2 = (1. - ALPHAS_CUMPROD_PREV) * torch.sqrt(ALPHAS) / (1. - ALPHAS_CUMPROD))
+POSTERIOR_MEAN_COEF1 = BETAS * torch.sqrt(ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD)
+POSTERIOR_MEAN_COEF2 = (1. - ALPHAS_CUMPROD_PREV) * torch.sqrt(ALPHAS) / (1. - ALPHAS_CUMPROD)
 POSTERIOR_VARIANCE = BETAS * (1. - ALPHAS_CUMPROD_PREV) / (1. - ALPHAS_CUMPROD)
-POSTERIOR_LOG_VARIANCE = torch.log(POSTERIOR_VARIANCE.clamp(min=1e-20)))
+POSTERIOR_LOG_VARIANCE = torch.log(POSTERIOR_VARIANCE.clamp(min=1e-20))
 print(ALPHAS)
 print(ALPHAS_CUMPROD)
 
@@ -32,7 +32,7 @@ def weighted_timestep(max_ts=1000):
     return math.floor(np.random.random() * max_ts)
 
 def take_step(noised_img, predicted_true_img, n):
-    mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_image + POSTERIOR_MEAN_COEF2[n-1] * noised_img
+    mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_img + POSTERIOR_MEAN_COEF2[n-1] * noised_img
     noise = torch.randn_like(mean)
     # TODO: Figure out whether we fucked up the logic with this zero indexing thing
     # nonzero_mask = (1 - (n == 0).float()).reshape(mean.shape[0], *((1,) * (len(mean.shape) - 1)))
