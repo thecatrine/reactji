@@ -21,8 +21,10 @@ LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
 log = logging.getLogger(__name__)
 
-BATCH_SZ = int(os.environ.get('BATCH_SZ', '200'))
+BATCH_SZ = int(os.environ.get('BATCH_SZ', '128'))
 log.info(f'Using BATCH_SZ={BATCH_SZ}')
+
+GENERATE_FROM = os.environ.get('GENERATE_FROM', '')
 
 RUN_NAME = os.environ.get('RUN_NAME', '')
 assert RUN_NAME != ''
@@ -65,6 +67,12 @@ decoder_trainer = DecoderTrainer(decoder)
 log.info('Loading twitch dataset...')
 data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=True)
 old_id_loss = 3e-3
+
+if GENERATE_FROM != '':
+    log.info('Generating...')
+    decoder_trainer.load(GENERATE_FROM)
+    images = decoder_trainer.sample(batch_size=32, max_batch_size=32)
+    torch.save(images, 'lucidrains_images.pt')
 
 log.info('Training...')
 # decoder_trainer.load('chk_lucidrains.pth')
