@@ -39,7 +39,7 @@ def weighted_timestep(max_ts=1000):
     return math.floor(np.random.random() * max_ts)
 
 def take_step(noised_img, predicted_true_img, n):
-    mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_image + POSTERIOR_MEAN_COEF2[n-1] * noised_img
+    mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_img + POSTERIOR_MEAN_COEF2[n-1] * noised_img
     noise = torch.randn_like(mean)
     # TODO: Figure out whether we fucked up the logic with this zero indexing thing
     # nonzero_mask = (1 - (n == 0).float()).reshape(mean.shape[0], *((1,) * (len(mean.shape) - 1)))
