@@ -123,10 +123,12 @@ old_id_loss = 3e-3
 loss_fn = torch.nn.MSELoss()
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
+START_FACTOR = 1
+if FORCE_WARMUP:
+    START_FACTOR=1e-6
 lr_scheduler = torch.optim.lr_scheduler.LinearLR(
     optimizer,
-    # RSI: 1e-6
-    start_factor=1.0,
+    start_factor=START_FACTOR,
     end_factor=1.0,
     total_iters=9000,
 )
