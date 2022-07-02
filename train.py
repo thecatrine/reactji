@@ -26,6 +26,10 @@ TRAIN_ON_NOISE = os.environ.get('TRAIN_ON_NOISE', '1')
 TRAIN_ON_NOISE = bool(int(TRAIN_ON_NOISE))
 log.info(f'Using TRAIN_ON_NOISE={TRAIN_ON_NOISE}')
 
+HIGH_CAPACITY = os.environ.get('HIGH_CAPACITY', '1')
+HIGH_CAPACITY = bool(int(HIGH_CAPACITY))
+log.info(f'Using HIGH_CAPACITY={HIGH_CAPACITY}')
+
 PRECISION = os.environ.get('PRECISION', 'AUTO')
 assert PRECISION in ['AUTO', '32', '16']
 USE_AUTOCAST = (PRECISION == 'AUTO')
@@ -111,7 +115,14 @@ if args.glide:
     log.info("Using model from glide repo")
     model = glide_model.create_model()
 else:
-    model = diffuser.Diffuser(dropout_rate=0.1)
+    if HIGH_CAPACITY:
+        model = diffuser.Diffuser(
+            dropout_rate=0.1,
+            channels=256,
+            num_residuals=6,
+        )
+    else:
+        model = diffuser.Diffuser(dropout_rate=0.1)
 
 if PRECISION == '16':
     model = model.to(torch.float16)

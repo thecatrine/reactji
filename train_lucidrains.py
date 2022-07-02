@@ -27,7 +27,8 @@ log.info(f'Using BATCH_SZ={BATCH_SZ}')
 GENERATE_FROM = os.environ.get('GENERATE_FROM', '')
 
 RUN_NAME = os.environ.get('RUN_NAME', '')
-assert RUN_NAME != ''
+if GENERATE_FROM == '':
+    assert RUN_NAME != ''
 log.info(f'Using RUN_NAME={RUN_NAME}')
 
 prefix_path = f'run_{RUN_NAME}'
@@ -36,10 +37,6 @@ if not os.path.exists(prefix_path):
     os.mkdir(prefix_path)
 if not os.path.exists(tensorboard_path):
     os.mkdir(tensorboard_path)
-
-# Tensorboard
-log.info('Configuring tensorboard...')
-writer = SummaryWriter(log_dir=tensorboard_path)
 
 EPOCHS = 10000
 epoch = 0
@@ -73,9 +70,14 @@ if GENERATE_FROM != '':
     decoder_trainer.load(GENERATE_FROM)
     images = decoder_trainer.sample(batch_size=32, max_batch_size=32)
     torch.save(images, 'lucidrains_images.pt')
+    exit(0)
+
+# Tensorboard
+log.info('Configuring tensorboard...')
+writer = SummaryWriter(log_dir=tensorboard_path)
 
 log.info('Training...')
-# decoder_trainer.load('chk_lucidrains.pth')
+decoder_trainer.load('chk_lucidrains.pth')
 while epoch < EPOCHS:
     dataloaders = data.dataloaders()
     train_data = dataloaders['train']
