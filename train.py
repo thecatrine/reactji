@@ -210,9 +210,10 @@ def train_one_epoch(train_data):
             outputs = model(inputs, timesteps)
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
-            true_loss = loss_fn(outputs, expected_outputs)
             if LOSS_SCALING:
-                true_loss = true_loss / torch.sqrt(timesteps + 1)
+                true_loss = torch.mean(torch.square(outputs - expected_outputs) / torch.sqrt(timesteps + 1))
+            else:
+                true_loss = loss_fn(outputs, expected_outputs)
 
         loss = true_loss / id_loss
         with torch.no_grad():
