@@ -39,6 +39,14 @@ FORCE_WARMUP = os.environ.get('FORCE_WARMUP', '0')
 FORCE_WARMUP = bool(int(FORCE_WARMUP))
 log.info(f'Using FORCE_WARMUP={FORCE_WARMUP}')
 
+EPOCH_LR_SCALING = os.environ.get('EPOCH_LR_SCALING', '1')
+EPOCH_LR_SCALING = bool(int(EPOCH_LR_SCALING))
+log.info(f'Using EPOCH_LR_SCALING={EPOCH_LR_SCALING}')
+
+LOSS_SCALING = os.environ.get('LOSS_SCALING', '1')
+LOSS_SCALING = bool(int(LOSS_SCALING))
+log.info(f'Using LOSS_SCALING={LOSS_SCALING}')
+
 MANUAL_SHUFFLE = os.environ.get('MANUAL_SHUFFLE', '0')
 MANUAL_SHUFFLE = bool(int(MANUAL_SHUFFLE))
 log.info(f'Using MANUAL_SHUFFLE={MANUAL_SHUFFLE}')
@@ -134,6 +142,7 @@ old_id_loss = 3e-3
 loss_fn = torch.nn.MSELoss()
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
+
 START_FACTOR = 1
 if FORCE_WARMUP:
     START_FACTOR=1e-6
@@ -142,6 +151,10 @@ lr_scheduler = torch.optim.lr_scheduler.LinearLR(
     start_factor=START_FACTOR,
     end_factor=1.0,
     total_iters=9000,
+)
+lr_epoch_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+    optimizer,
+    gamma=0.95,
 )
 
 if args.resume:
@@ -198,6 +211,8 @@ def train_one_epoch(train_data):
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
             true_loss = loss_fn(outputs, expected_outputs)
+            if LOSS_SCALING:
+                true_loss = true_loss / torch.sqrt(timesteps + 1)
 
         loss = true_loss / id_loss
         with torch.no_grad():
@@ -240,6 +255,8 @@ def train_one_epoch(train_data):
             log.info(f'      {true_loss}')
         if (i+1)%1000 == 0:
             save_all(f"cur_model.pth")
+    if EPOCH_LR_SCALING:
+        lr_epoch_scheduler.step()
 
 def scaled_test_loss(test_data):
     model.train(False)
