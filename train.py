@@ -47,9 +47,13 @@ LOSS_SCALING = os.environ.get('LOSS_SCALING', '1')
 LOSS_SCALING = bool(int(LOSS_SCALING))
 log.info(f'Using LOSS_SCALING={LOSS_SCALING}')
 
-MANUAL_SHUFFLE = os.environ.get('MANUAL_SHUFFLE', '0')
+MANUAL_SHUFFLE = os.environ.get('MANUAL_SHUFFLE', '1')
 MANUAL_SHUFFLE = bool(int(MANUAL_SHUFFLE))
 log.info(f'Using MANUAL_SHUFFLE={MANUAL_SHUFFLE}')
+
+LOSS_FN = os.environ.get('LOSS_FN', 'L2')
+assert LOSS_FN in ['L2', 'SMOOTH_L1']
+log.info(f'Using LOSS_FN={LOSS_FN}')
 
 RUN_NAME = os.environ.get('RUN_NAME', '')
 assert RUN_NAME != ''
@@ -139,7 +143,10 @@ log.info('Sending model to device...')
 model = model.to(device)
 old_loss_fn = torch.nn.MSELoss()
 old_id_loss = 3e-3
-loss_fn = torch.nn.MSELoss()
+if LOSS_FN == 'L2':
+    loss_fn = torch.nn.MSELoss()
+elif LOSS_FN == 'SMOOTH_L1':
+    loss_fn = torch.nn.SmoothL1Loss(beta=0.1)
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
                               weight_decay=1e-3, betas=(0.9, 0.999))
 
@@ -211,7 +218,8 @@ def train_one_epoch(train_data):
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
             if LOSS_SCALING:
-                true_loss = torch.mean(torch.square(outputs - expected_outputs) / torch.sqrt(timesteps + 1))
+                true_loss = torch.mean(torch.square(outputs - expected_outputs) /
+                                       torch.sqrt(timesteps + 1).reshape(-1, 1, 1, 1))
             else:
                 true_loss = loss_fn(outputs, expected_outputs)
 
@@ -233,7 +241,10 @@ def train_one_epoch(train_data):
         grad_max = max_gradient()
         # log.info(f'gradient norm: {grad_norm:.3f} max: {grad_max:.3f} loss: {true_loss}')
         # TODO: Are these numbers good?
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
+        if LOSS_SCALING:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+        else:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
         if grad_norm > 5 or grad_max > 1:
             log.warning(f'HIGH GRADIENT {grad_norm} {grad_max} (post-clip: {gradient_norm()})')
 
