@@ -170,11 +170,8 @@ class BigTwitchDataset(Dataset):
         self.num_workers = num_workers
         self.max_ts = max_ts
         self.path = path
-        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(140)]
-
-    def dataloaders(self):
-        if self.shuffle:
-            random.shuffle(self.files_to_load)
+        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(50)]
+        self.all_tensors = []
         for fname in self.files_to_load:
             if not os.path.exists(fname):
                 continue
@@ -184,11 +181,21 @@ class BigTwitchDataset(Dataset):
                 train_tensors = train_tensors[torch.randperm(train_tensors.shape[0])]
             test_tensors = ten[100:200]
             val_tensors = ten[:100]
-            tensors = {
+            self.all_tensors.append({
                 'train': train_tensors,
-                'val': val_tensors,
                 'test': test_tensors,
-            }
+                'val': val_tensors,
+            })
+        self.all_tensors = [{
+            'train': torch.cat([x['train'] for x in self.all_tensors], dim=0),
+            'test': torch.cat([x['test'] for x in self.all_tensors], dim=0),
+            'val': torch.cat([x['val'] for x in self.all_tensors], dim=0),
+        }]
+
+    def dataloaders(self):
+        if self.shuffle:
+            random.shuffle(self.all_tensors)
+        for tensors in self.all_tensors:
             dataloaders = {}
             for k, v in tensors.items():
                 dataset = ImagenetDataset(v, max_ts=self.max_ts)
