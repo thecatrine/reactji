@@ -142,7 +142,10 @@ def load_all(path):
 
 # Data
 log.info('Loading twitch dataset...')
-data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
+if INPUT_DATASET == '28':
+    data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
+else:
+    data = datasets.BigTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
 
 # Model
 log.info('Constructing model...')
@@ -208,7 +211,7 @@ def max_gradient():
     parameters = [p for p in model.parameters() if p.grad is not None]
     return torch.max(torch.stack([torch.max(p.grad.detach()) for p in parameters]))
 
-def train_one_epoch(train_data):
+def train_one_sub_epoch(train_data):
     model.train(True)
     running_loss = 0.
     running_old_loss = 0.
@@ -237,7 +240,8 @@ def train_one_epoch(train_data):
             if CONDITION_ON_DOWNSAMPLE is not None:
                 scale = CONDITION_ON_DOWNSAMPLE
                 downsampled = F.avg_pool_2d(true_target, kernel_size=scale, stride=scale)
-                upsampled = F.interpolate(downsampled, scale_factor=scale, mode='nearest')
+                blurred = F.gaussian_blur(downsampled, kernel_size=3)
+                upsampled = F.interpolate(blurred, scale_factor=scale, mode='nearest')
                 inputs = torch.cat(inputs, upsampled, dim=1)
             outputs = model(inputs, timesteps)
             # print('space', torch.cuda.memory_allocated(0))
@@ -317,13 +321,20 @@ log.info('Training...')
 while epoch < EPOCHS:
     log.info(f'Epoch {epoch:03}:')
 
-    dataloaders = data.dataloaders()
-    train_data = dataloaders['train']
-    test_data = dataloaders['test']
+    all_dataloaders = data.dataloaders()
+    test_loss_acc = 0
+    n_test_loss = 0
+    for dataloaders in all_dataloaders:
+        train_data = dataloaders['train']
+        test_data = dataloaders['test']
 
-    train_loss = train_one_epoch(train_data)
-    log.info('Testing...')
-    test_loss = scaled_test_loss(test_data)
+        train_loss = train_one_sub_epoch(train_data)
+        log.info('Testing...')
+        test_loss = scaled_test_loss(test_data)
+        test_loss_acc += test_loss
+        n_test_loss += 1
+
+    test_loss = test_loss_acc / n_test_loss
     log.info(f'Epoch {epoch:03} | Test | {test_loss:.10f}')
     writer.add_scalar('test_loss_scaled', test_loss)
 

@@ -8,6 +8,7 @@ import random
 import torch
 import torchvision
 import zipfile
+import os
 from .loader_utils import image_to_tensor, noise_img, weighted_timestep
 
 log = logging.getLogger(__name__)
@@ -154,6 +155,50 @@ class ImagenetData():
     def __exit__(self):
         pass
 
+class BigTwitchDataset(Dataset):
+    def __init__(self,
+                 path='loaders/data/twitch_big',
+                 batch_size=128,
+                 shuffle=True,
+                 manual_shuffle=False,
+                 num_workers=8,
+                 max_ts=1000):
+        super().__init__()
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.manual_shuffle = manual_shuffle
+        self.num_workers = num_workers
+        self.max_ts = max_ts
+        self.path = path
+        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(140)]
+
+    def dataloaders(self):
+        if self.shuffle:
+            random.shuffle(self.files_to_load)
+        for fname in self.files_to_load:
+            if not os.path.exists(fname):
+                continue
+            ten = torch.load(fname)
+            train_tensors = ten[200:]
+            if self.manual_shuffle:
+                train_tensors = train_tensors[torch.randperm(train_tensors.shape[0])]
+            test_tensors = ten[100:200]
+            val_tensors = ten[:100]
+            tensors = {
+                'train': train_tensors,
+                'val': val_tensors,
+                'test': test_tensors,
+            }
+            dataloaders = {}
+            for k, v in tensors.items():
+                dataset = ImagenetDataset(v, max_ts=self.max_ts)
+                dataloaders[k] = DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=self.shuffle,
+                    num_workers=self.num_workers,
+                )
+            yield dataloaders
 
 class NewTwitchDataset(Dataset):
     def __init__(self, path='loaders/data/twitch',
@@ -190,7 +235,7 @@ class NewTwitchDataset(Dataset):
                 num_workers=self.num_workers,
             )
 
-        return dataloaders
+        yield dataloaders
 
     def __enter__(self):
         pass
