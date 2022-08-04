@@ -37,7 +37,7 @@ class TwitchDataset(Dataset):
             image = Image.open(io.BytesIO(image_data))
             image = image.convert('RGBA')
             tensor = image_to_tensor(image)
-            if tensor.shape != (3, 28, 28):
+            if tensor.shape != (3, 28, 28) and tensor.shape != (3, 112, 112):
                 log.debug(f'Image {filename} has dimensions {tensor.shape}')
                 return None
             steps = weighted_timestep(self.max_ts-1)+1
@@ -63,7 +63,7 @@ class ImagenetDataset(Dataset):
 
         try:
             tensor = self.tensors[idx]
-            if tensor.shape != (3, 28, 28):
+            if tensor.shape != (3, 28, 28) and tensor.shape != (3, 112, 112):
                 log.debug(f'Image has dimensions {tensor.shape}')
                 return None
             steps = weighted_timestep(self.max_ts-1)+1

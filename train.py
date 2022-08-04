@@ -2,16 +2,17 @@ from loaders import datasets
 from models import diffuser
 from models import glide_model
 from torch.utils.tensorboard import SummaryWriter
-import logging
 import argparse
+import logging
 import matplotlib.pyplot as plt
-import random
-import torch
-import torchvision
-import zipfile
 import numpy as np
 import os
+import random
 import time
+import torch
+import torch.nn.functional as F
+import torchvision
+import zipfile
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
@@ -61,14 +62,17 @@ if INPUT_DATASET == '28':
         'num_head_channels': 64,
         'num_residuals': 6,
         'channel_multiple_schedule': [1, 2, 3],
+        'interior_attention': True,
     }
 elif INPUT_DATASET == '112':
+    # RSI: fix
     diffuser_opts = {
         'normalization_groups': 2,
         'channels': 12,
         'num_head_channels': 4,
         'num_residuals': 3,
         'channel_multiple_schedule': [1, 2, 3, 6, 12],
+        'interior_attention': False,
     }
 
 CONDITION_ON_DOWNSAMPLE = os.environ.get('CONDITION_ON_DOWNSAMPLE', '')
@@ -211,6 +215,17 @@ def max_gradient():
     parameters = [p for p in model.parameters() if p.grad is not None]
     return torch.max(torch.stack([torch.max(p.grad.detach()) for p in parameters]))
 
+def maybe_condition(inputs, true_target):
+    if CONDITION_ON_DOWNSAMPLE is not None:
+        scale = CONDITION_ON_DOWNSAMPLE
+        downsampled = F.avg_pool2d(true_target, kernel_size=scale, stride=scale)
+        blurred = torchvision.transforms.functional.gaussian_blur(downsampled, kernel_size=3)
+        upsampled = F.interpolate(blurred, scale_factor=scale, mode='nearest')
+        true_inputs = torch.cat((inputs, upsampled), dim=1)
+    else:
+        true_inputs = inputs
+    return true_inputs
+
 def train_one_sub_epoch(train_data):
     model.train(True)
     running_loss = 0.
@@ -237,13 +252,7 @@ def train_one_sub_epoch(train_data):
             if PRECISION != '32':
                 inputs = inputs.to(torch.float16)
                 timesteps = timesteps.to(torch.float16)
-            if CONDITION_ON_DOWNSAMPLE is not None:
-                scale = CONDITION_ON_DOWNSAMPLE
-                downsampled = F.avg_pool_2d(true_target, kernel_size=scale, stride=scale)
-                blurred = F.gaussian_blur(downsampled, kernel_size=3)
-                upsampled = F.interpolate(blurred, scale_factor=scale, mode='nearest')
-                inputs = torch.cat(inputs, upsampled, dim=1)
-            outputs = model(inputs, timesteps)
+            outputs = model(maybe_condition(inputs, true_target), timesteps)
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
             if LOSS_SCALING:
@@ -306,11 +315,12 @@ def scaled_test_loss(test_data):
         test_len = 0
         for vdata in test_data:
             s, inputs, expected_outputs = vdata
+            true_target = expected_outputs
             if TRAIN_ON_NOISE:
                 expected_outputs = inputs - expected_outputs
             s = s.to(torch.float32)
             s, inputs, expected_outputs = s.to(device), inputs.to(device), expected_outputs.to(device)
-            voutputs = model(inputs, s)
+            voutputs = model(maybe_condition(inputs, true_target.to(device)), s)
             id_loss = loss_fn(inputs, expected_outputs)
             vloss = loss_fn(voutputs, expected_outputs) / id_loss
             running_vloss += vloss.item()

@@ -107,6 +107,7 @@ class Diffuser(torch.nn.Module):
                  num_head_channels=64,
                  num_residuals=3,
                  in_channels=3,
+                 interior_attention=True,
                  channel_multiple_schedule=[1, 2, 3]):
         super(Diffuser, self).__init__()
         # input is b x in_channels x 28 x 28
@@ -121,6 +122,8 @@ class Diffuser(torch.nn.Module):
 
         self.channel_multiple_schedule = channel_multiple_schedule
         self.skip_sizes = []
+
+        self.interior_attention = interior_attention
 
         # State used in forward
         self.channels = channels
@@ -155,8 +158,9 @@ class Diffuser(torch.nn.Module):
                 log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
-                log.debug("Adding Attention ", cur_channels, channels_out)
+                if self.interior_attention:
+                    sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
+                    log.debug("Adding Attention ", cur_channels, channels_out)
 
                 self.skip_sizes.append(cur_channels)
                 self.down_layers.append(utils.TimestepEmbedSequential(*sub_layers))
@@ -194,19 +198,22 @@ class Diffuser(torch.nn.Module):
                 log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
-                log.debug("Adding Attention ", cur_channels, channels_out)
+                if self.interior_attention:
+                    sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
+                    log.debug("Adding Attention ", cur_channels, channels_out)
                 self.up_layers.append(utils.TimestepEmbedSequential(*sub_layers))
 
             if not is_last_block:
                 skip_channels = cur_channels + self.skip_sizes.pop()
                 log.debug ("Skip size was: ", skip_channels)
                 # We need extra channels here because we add in skip connections
-                self.up_layers.append(utils.TimestepEmbedSequential(
-                     Residual(skip_channels, cur_channels, timestamp_channels, dropout_rate, normalization_groups),
-                     Attention(cur_channels, normalization_groups, num_head_channels),
-                     utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'),
-                ))
+                arr = []
+                arr.append(Residual(skip_channels, cur_channels, timestamp_channels,
+                                    dropout_rate, normalization_groups))
+                if self.interior_attention:
+                    arr.append(Attention(cur_channels, normalization_groups, num_head_channels))
+                arr.append(utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'))
+                self.up_layers.append(utils.TimestepEmbedSequential(*arr))
                 log.debug(">> Adding Upsample ", cur_channels, cur_channels)
 
         self.out_layer = nn.Sequential(
