@@ -66,9 +66,11 @@ for batch in range(0, 140):
             batch_errors += 1
 
 
-    all_batch_tensors = torch.cat(batch_tensors, dim=0)
+    all_batch_tensors = torch.stack(batch_tensors)
 
     print("")
     print(f"Batch {batch} errors: {batch_errors}")
     print(f"Batch {batch} sizing issues: {batch_size_errors}")
+    print(f"Batch {batch} shape: {all_batch_tensors.shape}")
+    print()
     torch.save(all_batch_tensors, f'download/batch_tensors_{batch}.pt')

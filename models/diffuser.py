@@ -100,9 +100,16 @@ class Attention(nn.Module):
         return batch.reshape(orig_batch.shape) + orig_batch
 
 class Diffuser(torch.nn.Module):
-    def __init__(self, dropout_rate=0.1, normalization_groups=32, channels=192, num_head_channels=64, num_residuals=3):
+    def __init__(self,
+                 dropout_rate=0.1,
+                 normalization_groups=32,
+                 channels=192,
+                 num_head_channels=64,
+                 num_residuals=3,
+                 in_channels=3,
+                 channel_multiple_schedule=[1, 2, 3]):
         super(Diffuser, self).__init__()
-        # input is b x 3 x 28 x 28
+        # input is b x in_channels x 28 x 28
         self.time_embed = None
         self.in_layer = None
 
@@ -112,7 +119,7 @@ class Diffuser(torch.nn.Module):
 
         self.out_layer = None
 
-        self.channel_multiple_schedule = [1, 2, 3]
+        self.channel_multiple_schedule = channel_multiple_schedule
         self.skip_sizes = []
 
         # State used in forward
@@ -131,8 +138,8 @@ class Diffuser(torch.nn.Module):
         log.debug("Timestamps ", self.channels, self.timestamp_channels)
 
         # Initial convolution layer to higher channels
-        self.in_layer = nn.Conv2d(3, channels, 3, padding=1)
-        log.debug("Convolution ", 3, channels)
+        self.in_layer = nn.Conv2d(in_channels, channels, kernel_size=3, padding=1)
+        log.debug("Convolution ", in_channels, channels)
 
         # Do layers on the way down
         # (Res -> Attn) -> Downsample

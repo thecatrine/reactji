@@ -26,10 +26,6 @@ TRAIN_ON_NOISE = os.environ.get('TRAIN_ON_NOISE', '1')
 TRAIN_ON_NOISE = bool(int(TRAIN_ON_NOISE))
 log.info(f'Using TRAIN_ON_NOISE={TRAIN_ON_NOISE}')
 
-HIGH_CAPACITY = os.environ.get('HIGH_CAPACITY', '1')
-HIGH_CAPACITY = bool(int(HIGH_CAPACITY))
-log.info(f'Using HIGH_CAPACITY={HIGH_CAPACITY}')
-
 PRECISION = os.environ.get('PRECISION', 'AUTO')
 assert PRECISION in ['AUTO', '32', '16']
 USE_AUTOCAST = (PRECISION == 'AUTO')
@@ -54,6 +50,36 @@ log.info(f'Using MANUAL_SHUFFLE={MANUAL_SHUFFLE}')
 LOSS_FN = os.environ.get('LOSS_FN', 'L2')
 assert LOSS_FN in ['L2', 'SMOOTH_L1']
 log.info(f'Using LOSS_FN={LOSS_FN}')
+
+INPUT_DATASET = os.environ.get('INPUT_DATASET', '28')
+assert INPUT_DATASET in ['28', '112']
+log.info(f'Using INPUT_DATASET={INPUT_DATASET}')
+if INPUT_DATASET == '28':
+    diffuser_opts = {
+        'normalization_groups': 32,
+        'channels': 256,
+        'num_head_channels': 64,
+        'num_residuals': 6,
+        'channel_multiple_schedule': [1, 2, 3],
+    }
+elif INPUT_DATASET == '112':
+    diffuser_opts = {
+        'normalization_groups': 2,
+        'channels': 12,
+        'num_head_channels': 4,
+        'num_residuals': 3,
+        'channel_multiple_schedule': [1, 2, 3, 6, 12],
+    }
+
+CONDITION_ON_DOWNSAMPLE = os.environ.get('CONDITION_ON_DOWNSAMPLE', '')
+if CONDITION_ON_DOWNSAMPLE == '':
+    CONDITION_ON_DOWNSAMPLE = None
+    diffuser_opts['in_channels'] = 3
+else:
+    CONDITION_ON_DOWNSAMPLE = int(CONDITION_ON_DOWNSAMPLE)
+    assert CONDITION_ON_DOWNSAMPLE == 4
+    diffuser_opts['in_channels'] = 6
+log.info(f'Using CONDITION_ON_DOWNSAMPLE={CONDITION_ON_DOWNSAMPLE}')
 
 RUN_NAME = os.environ.get('RUN_NAME', '')
 assert RUN_NAME != ''
@@ -127,14 +153,7 @@ if args.glide:
     log.info("Using model from glide repo")
     model = glide_model.create_model()
 else:
-    if HIGH_CAPACITY:
-        model = diffuser.Diffuser(
-            dropout_rate=0.1,
-            channels=256,
-            num_residuals=6,
-        )
-    else:
-        model = diffuser.Diffuser(dropout_rate=0.1)
+    model = diffuser.Diffuser(**diffuser_opts)
 
 if PRECISION == '16':
     model = model.to(torch.float16)
@@ -202,6 +221,7 @@ def train_one_epoch(train_data):
         timesteps, inputs, expected_outputs = [
             x.to(device) for x in batches
         ]
+        true_target = expected_outputs
         if TRAIN_ON_NOISE:
             expected_outputs = inputs - expected_outputs
         if inputs.shape[0] < BATCH_SZ/2:
@@ -214,6 +234,11 @@ def train_one_epoch(train_data):
             if PRECISION != '32':
                 inputs = inputs.to(torch.float16)
                 timesteps = timesteps.to(torch.float16)
+            if CONDITION_ON_DOWNSAMPLE is not None:
+                scale = CONDITION_ON_DOWNSAMPLE
+                downsampled = F.avg_pool_2d(true_target, kernel_size=scale, stride=scale)
+                upsampled = F.interpolate(downsampled, scale_factor=scale, mode='nearest')
+                inputs = torch.cat(inputs, upsampled, dim=1)
             outputs = model(inputs, timesteps)
             # print('space', torch.cuda.memory_allocated(0))
             id_loss = loss_fn(inputs, expected_outputs)
