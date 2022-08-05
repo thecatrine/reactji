@@ -55,6 +55,7 @@ log.info(f'Using LOSS_FN={LOSS_FN}')
 INPUT_DATASET = os.environ.get('INPUT_DATASET', '28')
 assert INPUT_DATASET in ['28', '112']
 log.info(f'Using INPUT_DATASET={INPUT_DATASET}')
+# RSI defaults file
 if INPUT_DATASET == '28':
     diffuser_opts = {
         'normalization_groups': 32,
@@ -65,7 +66,6 @@ if INPUT_DATASET == '28':
         'interior_attention': True,
     }
 elif INPUT_DATASET == '112':
-    # RSI: fix
     diffuser_opts = {
         'normalization_groups': 2,
         'channels': 12,
