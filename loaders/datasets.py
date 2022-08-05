@@ -170,7 +170,7 @@ class BigTwitchDataset(Dataset):
         self.num_workers = num_workers
         self.max_ts = max_ts
         self.path = path
-        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(50)]
+        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(25)]
         self.all_tensors = []
         for fname in self.files_to_load:
             if not os.path.exists(fname):
@@ -187,10 +187,10 @@ class BigTwitchDataset(Dataset):
                 'val': val_tensors,
             })
         self.all_tensors = [{
-            'train': torch.cat([x['train'] for x in self.all_tensors], dim=0),
-            'test': torch.cat([x['test'] for x in self.all_tensors], dim=0),
-            'val': torch.cat([x['val'] for x in self.all_tensors], dim=0),
-        }]
+            'train': torch.cat([x['train'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
+            'test': torch.cat([x['test'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
+            'val': torch.cat([x['val'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
+        } for i in range(5)]
 
     def dataloaders(self):
         if self.shuffle:
