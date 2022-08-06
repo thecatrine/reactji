@@ -139,6 +139,11 @@ with torch.no_grad():
 
     save_images(temp.cpu(), emoji_prefix=args.emoji + "-small")
     blurred = torchvision.transforms.functional.gaussian_blur(temp, kernel_size=3)
+    #save_images(blurred.cpu(), emoji_prefix=args.emoji + "-small-blurred")
+
+    large_blurred = F.interpolate(temp, scale_factor=4, mode='nearest')
+    #save_images(large_blurred.cpu(), emoji_prefix=args.emoji + "-large-blurred")
+
     conditioning = F.interpolate(blurred, scale_factor=4, mode='nearest')
 
     temp = torch.cat(large_images, dim=0).to(device)
