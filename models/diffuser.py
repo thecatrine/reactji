@@ -158,7 +158,7 @@ class Diffuser(torch.nn.Module):
                 log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                if self.interior_attention:
+                if channel_multiple >= self.interior_attention:
                     sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
                     log.debug("Adding Attention ", cur_channels, channels_out)
 
@@ -198,7 +198,7 @@ class Diffuser(torch.nn.Module):
                 log.debug("Adding residual ", cur_channels, channels_out)
                 cur_channels = channels_out
 
-                if self.interior_attention:
+                if channel_multiple >= self.interior_attention:
                     sub_layers.append(Attention(cur_channels, normalization_groups, num_head_channels))
                     log.debug("Adding Attention ", cur_channels, channels_out)
                 self.up_layers.append(utils.TimestepEmbedSequential(*sub_layers))
@@ -210,7 +210,7 @@ class Diffuser(torch.nn.Module):
                 arr = []
                 arr.append(Residual(skip_channels, cur_channels, timestamp_channels,
                                     dropout_rate, normalization_groups))
-                if self.interior_attention:
+                if channel_multiple >= self.interior_attention:
                     arr.append(Attention(cur_channels, normalization_groups, num_head_channels))
                 arr.append(utils.InvokeFunction(F.interpolate, scale_factor=2, mode='nearest'))
                 self.up_layers.append(utils.TimestepEmbedSequential(*arr))

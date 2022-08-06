@@ -63,16 +63,16 @@ if INPUT_DATASET == '28':
         'num_head_channels': 64,
         'num_residuals': 6,
         'channel_multiple_schedule': [1, 2, 3],
-        'interior_attention': True,
+        'interior_attention': 1,
     }
 elif INPUT_DATASET == '112':
     diffuser_opts = {
-        'normalization_groups': 2,
-        'channels': 12,
-        'num_head_channels': 4,
-        'num_residuals': 3,
+        'normalization_groups': 4,
+        'channels': 24,
+        'num_head_channels': 8,
+        'num_residuals': 6,
         'channel_multiple_schedule': [1, 2, 3, 6, 12],
-        'interior_attention': False,
+        'interior_attention': 6,
     }
 
 CONDITION_ON_DOWNSAMPLE = os.environ.get('CONDITION_ON_DOWNSAMPLE', '')
