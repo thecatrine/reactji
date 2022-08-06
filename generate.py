@@ -1,6 +1,7 @@
 from multiprocessing import dummy
 
 import torch
+import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 
@@ -16,20 +17,45 @@ import os
 import logging
 import argparse
 
+from PIL import Image
+
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
 log = logging.getLogger(__name__)
 
 
+
 p = argparse.ArgumentParser()
-p.add_argument('--model', default="")
+p.add_argument('--generate-model', default="")
+p.add_argument('--upsample-model', default="")
 p.add_argument('--noise', action='store_true')
 p.add_argument('--emoji', default="")
+p.add_argument('--refine', default="")
 p.add_argument('--num', default=8, type=int)
 p.add_argument('--staps', default=50, type=int)
 p.add_argument('--stap-size', default=1, type=int)
 
 args = p.parse_args()
+
+# RSI defaults file
+generate_opts = {
+    'normalization_groups': 32,
+    'channels': 256,
+    'num_head_channels': 64,
+    'num_residuals': 6,
+    'channel_multiple_schedule': [1, 2, 3],
+    'interior_attention': True,
+    'in_channels': 3,
+}
+upsample_opts = {
+    'normalization_groups': 2,
+    'channels': 12,
+    'num_head_channels': 4,
+    'num_residuals': 3,
+    'channel_multiple_schedule': [1, 2, 3, 6, 12],
+    'interior_attention': False,
+    'in_channels': 6,
+}
 
 def render_batch(*args):
     foos = []
@@ -47,10 +73,17 @@ def render_batch(*args):
 
 print("Loading models")
 
+generate_model = diffuser.Diffuser(**generate_opts)
+upsample_model = diffuser.Diffuser(**upsample_opts)
 device = torch.device('cuda')
-model = diffuser.Diffuser(dropout_rate=0.1).to(device)
-model.load_state_dict(torch.load(args.model, map_location=device)['model'])
-model.eval()
+
+generate_model.load_state_dict(torch.load(args.generate_model, map_location=device)['model'])
+generate_model = generate_model.to(device)
+generate_model.eval()
+
+upsample_model.load_state_dict(torch.load(args.upsample_model, map_location=device)['model'])
+upsample_model = upsample_model.to(device)
+upsample_model.eval()
 
 #
 STAPS=args.staps
@@ -62,41 +95,83 @@ dataloaders = data.dataloaders()
 test_data = iter(dataloaders['test'])
 
 images = []
+large_images = []
 s, inputs, outputs = next(test_data)
+
+all_images = []
 for i in range(args.num):
     if args.noise:
         images.append(torch.normal(torch.zeros(3, 28, 28), 1).unsqueeze(0))
+        large_images.append(torch.normal(torch.zeros(3, 112, 112), 1).unsqueeze(0))
+    elif args.refine:
+        img = Image.open(args.refine)
+        tensor = loader_utils.image_to_tensor(img)
+        images.append(loader_utils.noise_img(tensor, STAPS).unsqueeze(0))
     else:
         images.append(loader_utils.noise_img(outputs[i], STAPS).unsqueeze(0))
 
 # Try to generate something
 
-all_images = []
+
+def save_images(images, emoji_prefix=None):
+    os.makedirs(emoji_prefix, exist_ok=False)
+    if emoji_prefix is not None:
+        for i in range(len(images)):
+            res = loader_utils.tensor_to_image(images[i].cpu())
+            res.save(f"{emoji_prefix}/emoji-{i}.png")
 
 
 temp = torch.cat(images, dim=0).to(device)
+begin = outputs[:args.num]
+
 with torch.no_grad():
+    # Generate diffusion
     for i in range(STAPS, 0, -STAP_SIZE):
         s = torch.Tensor([i])
-        outputs = model.forward(temp.to(device), s.to(device))
+        outputs = generate_model.forward(temp.to(device), s.to(device))
         orig = temp - outputs
-        temp = loader_utils.take_step(temp, orig, i)
+        for j in range(i, i-STAP_SIZE, -1):
+            temp = loader_utils.take_step(temp, orig, j)
 
-        print(i)
-        if not args.emoji and (i % 50 == STAP_SIZE or i < 10):
+        print(f"Generate {i}")
+        if not args.emoji and (i % 50 == STAP_SIZE):
             all_images.append(temp.cpu())
 
-    if not args.emoji:
-        loader_utils.tensor_to_image(temp[0].cpu()).save('emoji-test.png')
+    save_images(temp.cpu(), emoji_prefix=args.emoji + "-small")
+    blurred = torchvision.transforms.functional.gaussian_blur(temp, kernel_size=3)
+    #save_images(blurred.cpu(), emoji_prefix=args.emoji + "-small-blurred")
+
+    large_blurred = F.interpolate(temp, scale_factor=4, mode='nearest')
+    #save_images(large_blurred.cpu(), emoji_prefix=args.emoji + "-large-blurred")
+
+    conditioning = F.interpolate(blurred, scale_factor=4, mode='nearest')
+
+    temp = torch.cat(large_images, dim=0).to(device)
+    # Upsample diffusion
+    for i in range(STAPS, 0, -STAP_SIZE):
+        s = torch.Tensor([i])
+        outputs = upsample_model.forward(torch.cat([temp, conditioning], dim=1), s.to(device))
+        
+        orig = temp - outputs
+        for j in range(i, i-STAP_SIZE, -1):
+            temp = loader_utils.take_step(temp, orig, j)
+
+        print(f"Upsample {i}")
+        if not args.emoji and (i % 50 == STAP_SIZE):
+            all_images.append(temp.cpu())
+    
+    save_images(temp.cpu(), emoji_prefix=args.emoji)
 
 #import pdb; pdb.set_trace()
+if not args.noise and not args.refine:
+    all_images.append(begin)
+
 if args.emoji:
-    os.makedirs(args.emoji, exist_ok=False)
-    for i in range(len(temp)):
-        res = loader_utils.tensor_to_image(temp[i].cpu())
-        res.save(f"{args.emoji}/emoji-{i}.png")
-else:
-    render_batch(*all_images)
+    all_images.append(temp.cpu())
+
+print("all_images:", len(all_images), all_images[0].shape)
+render_batch(*all_images)
+
 
 #vals = model.forward(images)
 #guesses = torch.argmax(vals, dim=1)
