@@ -157,6 +157,7 @@ class ImagenetData():
 
 class BigTwitchDataset(Dataset):
     def __init__(self,
+                 load_n=25,
                  path='loaders/data/twitch_big',
                  batch_size=128,
                  shuffle=True,
@@ -170,7 +171,7 @@ class BigTwitchDataset(Dataset):
         self.num_workers = num_workers
         self.max_ts = max_ts
         self.path = path
-        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(25)]
+        self.files_to_load = [f'{path}/batch_tensors_{n}.pt' for n in range(load_n)]
         self.all_tensors = []
         for fname in self.files_to_load:
             if not os.path.exists(fname):
@@ -186,11 +187,12 @@ class BigTwitchDataset(Dataset):
                 'test': test_tensors,
                 'val': val_tensors,
             })
+        sz=5
         self.all_tensors = [{
-            'train': torch.cat([x['train'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
-            'test': torch.cat([x['test'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
-            'val': torch.cat([x['val'] for x in self.all_tensors[i*5:(i+1)*5]], dim=0),
-        } for i in range(5)]
+            'train': torch.cat([x['train'] for x in self.all_tensors[i*sz:(i+1)*sz]], dim=0),
+            'test': torch.cat([x['test'] for x in self.all_tensors[i*sz:(i+1)*sz]], dim=0),
+            'val': torch.cat([x['val'] for x in self.all_tensors[i*sz:(i+1)*sz]], dim=0),
+        } for i in range(load_n//sz)]
 
     def dataloaders(self):
         if self.shuffle:

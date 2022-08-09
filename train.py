@@ -68,11 +68,11 @@ if INPUT_DATASET == '28':
 elif INPUT_DATASET == '112':
     diffuser_opts = {
         'normalization_groups': 4,
-        'channels': 24,
+        'channels': 32,
         'num_head_channels': 8,
         'num_residuals': 6,
         'channel_multiple_schedule': [1, 2, 3, 6, 12],
-        'interior_attention': 6,
+        'interior_attention': 3,
     }
 
 CONDITION_ON_DOWNSAMPLE = os.environ.get('CONDITION_ON_DOWNSAMPLE', '')
@@ -149,7 +149,7 @@ log.info('Loading twitch dataset...')
 if INPUT_DATASET == '28':
     data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
 else:
-    data = datasets.BigTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
+    data = datasets.BigTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE, load_n=40)
 
 # Model
 log.info('Constructing model...')
@@ -219,8 +219,9 @@ def maybe_condition(inputs, true_target):
     if CONDITION_ON_DOWNSAMPLE is not None:
         scale = CONDITION_ON_DOWNSAMPLE
         downsampled = F.avg_pool2d(true_target, kernel_size=scale, stride=scale)
-        blurred = torchvision.transforms.functional.gaussian_blur(downsampled, kernel_size=3)
-        upsampled = F.interpolate(blurred, scale_factor=scale, mode='nearest')
+        if random.random() < 0.5:
+            downsampled = torchvision.transforms.functional.gaussian_blur(downsampled, kernel_size=3)
+        upsampled = F.interpolate(downsampled, scale_factor=scale, mode='nearest')
         true_inputs = torch.cat((inputs, upsampled), dim=1)
     else:
         true_inputs = inputs
