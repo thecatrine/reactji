@@ -44,16 +44,16 @@ generate_opts = {
     'num_head_channels': 64,
     'num_residuals': 6,
     'channel_multiple_schedule': [1, 2, 3],
-    'interior_attention': True,
+    'interior_attention': 1,
     'in_channels': 3,
 }
 upsample_opts = {
-    'normalization_groups': 2,
-    'channels': 12,
-    'num_head_channels': 4,
-    'num_residuals': 3,
+    'normalization_groups': 4,
+    'channels': 32,
+    'num_head_channels': 8,
+    'num_residuals': 6,
     'channel_multiple_schedule': [1, 2, 3, 6, 12],
-    'interior_attention': False,
+    'interior_attention': 3,
     'in_channels': 6,
 }
 
@@ -138,7 +138,7 @@ with torch.no_grad():
             all_images.append(temp.cpu())
 
     save_images(temp.cpu(), emoji_prefix=args.emoji + "-small")
-    blurred = torchvision.transforms.functional.gaussian_blur(temp, kernel_size=3)
+    blurred = temp#torchvision.transforms.functional.gaussian_blur(temp, kernel_size=3)
     #save_images(blurred.cpu(), emoji_prefix=args.emoji + "-small-blurred")
 
     large_blurred = F.interpolate(temp, scale_factor=4, mode='nearest')
