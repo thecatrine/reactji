@@ -36,11 +36,17 @@ def noise_img(img, n=1):
 def weighted_timestep(max_ts=1000):
     return math.floor(np.random.random() * max_ts)
 
-def take_step(noised_img, predicted_true_img, n):
+CLIP_GUIDANCE_SCALE = 150
+def take_step(noised_img, predicted_true_img, n, condition=None):
     mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_img + POSTERIOR_MEAN_COEF2[n-1] * noised_img
     noise = torch.randn_like(mean)
     # TODO: Figure out whether we fucked up the logic with this zero indexing thing
     # nonzero_mask = (1 - (n == 0).float()).reshape(mean.shape[0], *((1,) * (len(mean.shape) - 1)))
+    if condition is not None:
+        blah = CLIP_GUIDANCE_SCALE * condition
+        print(noise.norm(), blah.norm())
+        noise = blah*(0.1**0.5) + noise*(0.9**0.5)
+
     return mean + (0.5 * POSTERIOR_LOG_VARIANCE[n-1]).exp() * noise
 
 SCALE = 10
@@ -60,3 +66,10 @@ def tensor_to_image(tensor):
 
     image = torchvision.transforms.ToPILImage()(tensor)
     return image
+
+# Not actually whitening, just normalizing
+def unwhiten(tensor):
+    return whitener.untransform(tensor)
+
+def unwhiten_differentiable(tensor):
+    return whitener.differentiable_untransform(tensor)
