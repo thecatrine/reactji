@@ -36,7 +36,7 @@ def noise_img(img, n=1):
 def weighted_timestep(max_ts=1000):
     return math.floor(np.random.random() * max_ts)
 
-CLIP_GUIDANCE_SCALE = 150
+CLIP_GUIDANCE_SCALE = 200
 def take_step(noised_img, predicted_true_img, n, condition=None):
     mean = POSTERIOR_MEAN_COEF1[n-1] * predicted_true_img + POSTERIOR_MEAN_COEF2[n-1] * noised_img
     noise = torch.randn_like(mean)
