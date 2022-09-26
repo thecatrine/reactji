@@ -40,10 +40,12 @@ def train(data_loader, model, optimizer, beta, steps, writer):
         optimizer.step()
         steps += 1
 
+    return steps
+
 def test(data_loader, model, steps, writer):
     with torch.no_grad():
         loss_recons, loss_vq = 0., 0.
-        for images, _ in data_loader:
+        for _, images, _ in data_loader:
             images = images.to(device)
             x_tilde, z_e_x, z_q_x = model(images)
             loss_recons += F.mse_loss(x_tilde, images)
@@ -74,43 +76,41 @@ if __name__ == '__main__':
     hidden_size = 256
     k = 512
     batch_size = 128
-    num_epochs = 100
+    num_epochs = 10000
     lr = 2e-4
     beta = 1.0
-
-
-
-    data = datasets.TwitchData(batch_size=256, max_ts=1)
-    dataloaders = data.dataloaders()
-    train_loader = dataloaders['train']
-    test_loader = dataloaders['test']
-
-    # Fixed images for Tensorboard
-    _, fixed_images, _ = next(iter(test_loader))
-    fixed_grid = make_grid(fixed_images, nrow=8, range=(-1, 1), normalize=True)
-    writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(3, hidden_size, k).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # Generate the samples first once
-    reconstruction = generate_samples(fixed_images, model)
-    grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
-    writer.add_image('reconstruction', grid, 0)
+    data = datasets.NewTwitchDataset(batch_size=256, max_ts=1)
 
     steps = 0
     best_loss = -1.
     for epoch in range(num_epochs):
-        train(train_loader, model, optimizer, beta, steps, writer)
-        loss, _ = test(valid_loader, model, steps, writer)
+        dataloaders = data.dataloaders()
+        print(f"Epoch {epoch}")
+        for dataloader in dataloaders:
+            train_loader = dataloader['train']
+            test_loader = dataloader['test']
 
-        reconstruction = generate_samples(fixed_images, model)
-        grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
-        writer.add_image('reconstruction', grid, epoch + 1)
+            # Fixed images for Tensorboard
+            _, fixed_images, _ = next(iter(test_loader))
+            fixed_grid = make_grid(fixed_images, nrow=8, range=(-1, 1), normalize=True)
+            writer.add_image('original', fixed_grid, 0)
 
-        if (epoch == 0) or (loss < best_loss):
-            best_loss = loss
-            with open('vqvae/best.pt', 'wb') as f:
-                torch.save(model.state_dict(), f)
+            
+            steps = train(train_loader, model, optimizer, beta, steps, writer)
+            loss, _ = test(test_loader, model, steps, writer)
+
+            reconstruction = generate_samples(fixed_images, model)
+            grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
+            writer.add_image('reconstruction', grid, epoch + 1)
+
+            if (epoch == 0) or (loss < best_loss):
+                best_loss = loss
+                with open('vqvae/best.pt', 'wb') as f:
+                    torch.save(model.state_dict(), f)
+
         with open(f'vqvae/model_{epoch + 1}.pt', 'wb') as f:
             torch.save(model.state_dict(), f)
