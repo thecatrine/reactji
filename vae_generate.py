@@ -18,7 +18,6 @@ import logging
 import argparse
 
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
 
 from vae_modules import VectorQuantizedVAE, to_scalar
 

@@ -18,7 +18,7 @@ import logging
 import argparse
 
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
+
 
 from vae_modules import VectorQuantizedVAE, to_scalar
 
@@ -38,14 +38,24 @@ model = VectorQuantizedVAE(3, hidden_size, k).to(device)
 model.load_state_dict(torch.load('vqvae/model_1159.pt'))
 model.eval()
 
+batches_of_tokens = []
+
+i = 0
 for dataloader in dataloaders:
+    print(f"Loader {i}")
+    i += 1
     train_loader = dataloader['train']
     test_loader = dataloader['test']
 
-    _, inputs, _ = next(test_data)
+    for _, inputs, _ in test_loader:
+        model_outputs, encoder_cont, encoder_q = model(inputs.to(device))
 
-    model_outputs, encoder_cont, encoder_q = model(inputs.to(device))
+        tokens = model.codebook(encoder_cont)
+        tokens = tokens.reshape(tokens.shape[0], -1)
 
-    tokens = model.codebook(encoder_cont)
-    tokens.reshape(tokens.shape[0], -1)
-    import pdb; pdb.set_trace()
+        batches_of_tokens.append(tokens.cpu().detach())
+
+tokens_tensor = torch.cat(batches_of_tokens, dim=0)
+torch.save(tokens_tensor, "tokens_test.pt")
+        
+print(tokens_tensor.shape)
