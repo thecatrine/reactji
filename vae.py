@@ -66,24 +66,27 @@ def generate_samples(images, model):
         x_tilde, _, _ = model(images)
     return x_tilde
 
+
+data = datasets.NewTwitchDataset(batch_size=256, max_ts=1)
+
+
+hidden_size = 256
+k = 512
+batch_size = 128
+num_epochs = 10000
+lr = 2e-4
+beta = 1.0
+
+model = VectorQuantizedVAE(3, hidden_size, k).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
 if __name__ == '__main__':
     import argparse
     import os
     import multiprocessing as mp
 
-    parser = argparse.ArgumentParser(description='VQ-VAE')
-
-    hidden_size = 256
-    k = 512
-    batch_size = 128
-    num_epochs = 10000
-    lr = 2e-4
-    beta = 1.0
-
-    model = VectorQuantizedVAE(3, hidden_size, k).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    data = datasets.NewTwitchDataset(batch_size=256, max_ts=1)
+    parser = argparse.ArgumentParser(description='VQ-VAE')\
+    
 
     steps = 0
     best_loss = -1.
