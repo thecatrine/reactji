@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 import zipfile
+import re
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL)
@@ -144,13 +145,6 @@ def load_all(path):
         optimizer.load_state_dict(loaded['optimizer'])
         lr_scheduler.load_state_dict(loaded['lr_scheduler'])
 
-# Data
-log.info('Loading twitch dataset...')
-if INPUT_DATASET == '28':
-    data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
-else:
-    data = datasets.BigTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE, load_n=40)
-
 # Model
 log.info('Constructing model...')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -173,8 +167,36 @@ if LOSS_FN == 'L2':
     loss_fn = torch.nn.MSELoss()
 elif LOSS_FN == 'SMOOTH_L1':
     loss_fn = torch.nn.SmoothL1Loss(beta=0.1)
-optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR,
-                              weight_decay=1e-3, betas=(0.9, 0.999))
+
+def adamw_easy_grouper(module_name, module, parameter_name, parameter):
+    if module.__class__.__module__ == torch.nn.modules.normalization.__name__:
+        return 'no_decay'
+    if re.fullmatch('.*bias', parameter_name):
+        return 'no_decay'
+    return 'decay'
+
+def _group_params(obj, grouper, out, output, mn):
+    for new_mn, m in obj.named_children():
+        _group_params(m, grouper, out, output, mn=('' if mn == '' else mn+'.')+new_mn)
+    for pn, p in obj._parameters.items():
+        group = grouper(module_name=mn, module=obj, parameter_name=pn, parameter=p)
+        if output == 'params':
+            out.setdefault(group, []).append(p)
+        elif output == 'names':
+            out.setdefault(group, []).append(mn+'.'+pn)
+
+def group_params(obj, grouper, output='params'):
+    assert output in ['params', 'names']
+    out = {}
+    _group_params(obj, grouper, out, output, mn='')
+    assert len(list(obj.parameters())) == sum([len(x) for x in out.values()])
+    return out
+
+split_params = group_params(model, adamw_easy_grouper)
+optimizer = torch.optim.AdamW([
+    {'params': split_params['decay'], 'weight_decay': 1e-3},
+    {'params': split_params['no_decay'], 'weight_decay': 0.0},
+], lr=LR, betas=(0.9, 0.999))
 
 START_FACTOR = 1
 if FORCE_WARMUP:
@@ -327,6 +349,13 @@ def scaled_test_loss(test_data):
             running_vloss += vloss.item()
             test_len += 1
         return running_vloss / test_len
+
+# Data
+log.info('Loading twitch dataset...')
+if INPUT_DATASET == '28':
+    data = datasets.NewTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE)
+else:
+    data = datasets.BigTwitchDataset(batch_size=BATCH_SZ, manual_shuffle=MANUAL_SHUFFLE, load_n=40)
 
 log.info('Training...')
 while epoch < EPOCHS:
