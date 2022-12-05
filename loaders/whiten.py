@@ -40,7 +40,6 @@ def batch_generator(image_generator, batch_size, max_timesteps=150):
 
         yield (torch.tensor(batch_steps), torch.cat(batch_inputs), torch.cat(batch_outputs))
 
-
 class Whitener:
     def __init__(self):
         with open('loaders/constants/scaler.p', 'rb') as f:
@@ -51,7 +50,9 @@ class Whitener:
         image = torch.permute(orig, (1, 2, 0))
         image = image.reshape(height*width, -1)
 
-        image = torch.tensor(func(image), dtype=torch.float32)
+        image = func(image)
+        if not isinstance(image, torch.Tensor):
+            image = torch.tensor(image, dtype=torch.float32)
 
         image = image.reshape(height, width, -1)
         image = torch.permute(image, (2, 0, 1))
@@ -63,6 +64,15 @@ class Whitener:
     
     def untransform(self, transformed):
         return self.a(transformed, self.scaler.inverse_transform)
+
+    def differentiable_untransform(self, transformed):
+        def differentiable_inverse(tensor):
+            X = tensor
+            Y = X * torch.tensor(self.scaler.scale_, dtype=tensor.dtype).detach()
+            Z = Y + torch.tensor(self.scaler.mean_, dtype=tensor.dtype).detach()
+            return Z
+        
+        return self.a(transformed, differentiable_inverse)
     
 
 # if __name__ == "__main__":
