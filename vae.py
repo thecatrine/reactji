@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 # Edits
 from loaders import datasets
 
-device = torch.device('cuda')
+device = torch.device("cuda:1")
 
 writer = SummaryWriter()
 
@@ -70,8 +70,8 @@ def generate_samples(images, model):
 data = datasets.NewTwitchDataset(batch_size=256, max_ts=1)
 
 
-hidden_size = 256
-k = 512
+hidden_size = 512
+k = 2024
 batch_size = 128
 num_epochs = 10000
 lr = 2e-4
